@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice Sentinel</title>
+  <link rel="icon" href="assets/images/ssv.jpg" type="image/jpeg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Review Recording modal (shown when user clicks Stop) -->
+  <div id="review-modal-overlay" class="review-modal-overlay" aria-hidden="true">
+    <div class="review-modal" role="dialog" aria-labelledby="review-modal-title" aria-modal="true">
+      <h2 id="review-modal-title" class="review-modal-title">Review Recording</h2>
+
+      <audio id="review-audio" style="display: none;"></audio>
+      <div class="review-audio-player">
+        <button type="button" class="review-play-btn" id="review-play-btn" aria-label="Play" disabled>
+          <svg class="review-icon-play" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="review-icon-pause" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        </button>
+        <span class="review-time" id="review-time">0:00 / 0:00</span>
+        <div class="review-progress-wrap">
+          <div class="review-progress-bar" id="review-progress-bar"></div>
+        </div>
+        <button type="button" class="review-volume-btn" aria-label="Volume">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        </button>
+        <button type="button" class="review-more-btn" aria-label="More options">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        </button>
+      </div>
+
+      <div class="review-transcription-wrap">
+        <p class="review-transcription" id="review-transcription">Transcription will appear here after analysis.</p>
+      </div>
+
+      <div class="review-modal-actions">
+        <button type="button" class="btn-review-rerecord" id="review-rerecord-btn">Re-record</button>
+        <button type="button" class="btn-gradient btn-review-submit" id="review-submit-btn">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit profile modal (Settings) -->
+  <div id="edit-profile-overlay" class="review-modal-overlay edit-profile-overlay" aria-hidden="true">
+    <div class="review-modal edit-profile-modal" role="dialog" aria-labelledby="edit-profile-title" aria-modal="true">
+      <h2 id="edit-profile-title" class="review-modal-title">Edit profile</h2>
+      <p class="edit-profile-sub">Update your name, password and/or user type.</p>
+      <div id="edit-profile-error" class="auth-error" style="display: none;" role="alert"></div>
+      <div class="input-wrap">
+        <label>Name</label>
+        <input type="text" id="edit-profile-name" placeholder="Your name" autocomplete="name" />
+      </div>
+      <div class="input-wrap">
+        <label>Current password (required only when changing password)</label>
+        <input type="password" id="edit-profile-current-password" placeholder="••••••••" autocomplete="current-password" />
+      </div>
+      <div class="input-wrap">
+        <label>New password (leave blank to keep current)</label>
+        <input type="password" id="edit-profile-new-password" placeholder="••••••••" autocomplete="new-password" />
+      </div>
+      <div class="input-wrap">
+        <label>Confirm new password</label>
+        <input type="password" id="edit-profile-confirm-password" placeholder="••••••••" autocomplete="new-password" />
+      </div>
+      <div class="input-wrap">
+        <label>User type</label>
+        <select id="edit-profile-user-type">
+          <option value="BASIC">Basic</option>
+          <option value="TECHNICAL">Technical</option>
+          <option value="FORENSIC">Forensic</option>
+        </select>
+      </div>
+      <div class="review-modal-actions">
+        <button type="button" class="btn-review-rerecord" id="edit-profile-cancel">Cancel</button>
+        <button type="button" class="btn-gradient btn-review-submit" id="edit-profile-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Welcome / landing (full page, no sidebar) -->
+  <main id="screen-welcome" class="screen active welcome-screen">
+    <div class="welcome-bg" aria-hidden="true">
+      <div class="welcome-bg-orb welcome-bg-orb-1"></div>
+      <div class="welcome-bg-orb welcome-bg-orb-2"></div>
+      <div class="welcome-bg-orb welcome-bg-orb-3"></div>
+      <div class="welcome-bg-orb welcome-bg-orb-4"></div>
+    </div>
+    <div class="welcome-center">
+      <div class="welcome-card card welcome-card-elevated">
+        <div class="card-inner">
+          <div id="welcome-content">
+            <div class="logo-placeholder logo-img-wrap">
+              <img src="assets/images/ssv.jpg" alt="Voice Sentinel" class="logo-img" id="welcome-logo-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+              <svg class="logo-fallback" style="display: none;" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+            </div>
+            <h1 class="brand-title">Voice Sentinel</h1>
+            <p class="welcome-tagline">Upload or record your voice for instant analysis.</p>
+            <ul class="welcome-features" aria-label="Features">
+              <li><span class="welcome-feature-icon" aria-hidden="true">✓</span> Deepfake detection</li>
+              <li><span class="welcome-feature-icon" aria-hidden="true">✓</span> Protect your identity</li>
+              <li><span class="welcome-feature-icon" aria-hidden="true">✓</span> AI-powered analysis</li>
+            </ul>
+            <div class="welcome-buttons">
+              <button type="button" class="btn-gradient" id="btn-signin">Sign In / Sign Up</button>
+              <button type="button" class="btn-outline" id="btn-skip">
+                Skip & Continue <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+            </div>
+          </div>
+          <div id="auth-content" style="display: none;" class="auth-form">
+            <div class="logo-placeholder logo-img-wrap auth-logo" style="margin-bottom: 20px;">
+              <img src="assets/images/ssv.jpg" alt="Voice Sentinel" class="logo-img" id="auth-logo-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+              <svg class="logo-fallback" style="display: none;" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+            </div>
+            <h2 id="auth-title">Welcome Back</h2>
+            <p class="sub" id="auth-sub">Sign in to access your account</p>
+            <div id="auth-error" class="auth-error" style="display: none;" role="alert"></div>
+            <div class="input-wrap">
+              <label>Email</label>
+              <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email" />
+            </div>
+            <div class="input-wrap">
+              <label>Password</label>
+              <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" />
+            </div>
+            <div id="auth-signup-fields" style="display: none;">
+              <div class="input-wrap">
+                <label>Name</label>
+                <input type="text" id="auth-name" placeholder="Your name" autocomplete="name" />
+              </div>
+              <div class="input-wrap">
+                <label>Confirm Password</label>
+                <input type="password" id="auth-password-confirm" placeholder="••••••••" autocomplete="new-password" />
+              </div>
+              <div class="input-wrap">
+                <label>User type</label>
+                <select id="user-type-select">
+                  <option value="BASIC">Basic</option>
+                  <option value="TECHNICAL">Technical</option>
+                  <option value="FORENSIC">Forensic</option>
+                </select>
+              </div>
+            </div>
+            <button type="button" class="btn-gradient" id="btn-auth-submit" style="margin-bottom: 12px;">Sign In</button>
+            <p class="auth-secure" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Secure sign-in
+            </p>
+            <button type="button" class="link" id="btn-toggle-auth">Need an account? Sign up</button>
+            <button type="button" class="link" id="btn-skip-auth">Skip for now</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- App shell: sidebar + main content (shown after Skip / Sign in) -->
+  <div id="app-shell" class="app-shell" style="display: none;">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo logo-img-wrap">
+          <img src="assets/images/ssv.jpg" alt="Voice Sentinel" class="logo-img sidebar-logo-img" id="sidebar-logo-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+          <svg class="logo-fallback" style="display: none;" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        </div>
+        <span class="sidebar-title">Voice Sentinel</span>
+      </div>
+      <nav class="sidebar-nav">
+        <button type="button" class="nav-item active" data-nav="home" aria-current="page">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Home</span>
+        </button>
+        <button type="button" class="nav-item" data-nav="settings">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Settings</span>
+        </button>
+        <button type="button" class="nav-item" data-nav="change-user-type">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>Change user type</span>
+        </button>
+        <button type="button" class="nav-item" data-nav="audio-breakdown">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+          <span>Audio breakdown</span>
+        </button>
+        <button type="button" class="nav-item" data-nav="download">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Download mobile app</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <button type="button" class="nav-item nav-item-logout" id="sidebar-logout">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span>Log out</span>
+        </button>
+      </div>
+    </aside>
+    <div class="main-content">
+      <!-- Home panel -->
+      <section id="panel-home" class="panel active">
+        <div class="page-content">
+          <h1 class="page-title">Deepfake Detection</h1>
+          <p class="page-subtitle">Protecting your audio authenticity with AI.</p>
+
+          <!-- Ready to Scan card -->
+          <div class="card record-card">
+            <div class="card-inner record-card">
+              <div class="icon-circle">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+              </div>
+              <div class="text">
+                <h3 id="record-status">Ready to Scan</h3>
+                <p id="record-sub">Record or upload an audio file to begin.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Waveform card (bar style) -->
+          <div class="card">
+            <div class="card-inner">
+              <div class="audio-preview-label">AUDIO WAVEFORM VISUALIZATION</div>
+              <!-- Waveform Container -->
+              <div class="waveform-container waveform-display">
+                <div id="waveform-placeholder" class="waveform-placeholder">
+                  Tap Record to start and see the live waveform
+                </div>
+                <canvas id="waveform-canvas" class="waveform-canvas" aria-hidden="true"></canvas>
+                <div id="waveform-bars" class="waveform-bars" style="display: none;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recording status: pill badge + large timer (shown when recording or paused) -->
+          <div id="recording-status-row" class="recording-status-row" style="display: none;">
+            <div class="recording-pill" id="recording-pill">
+              <span class="recording-dot" aria-hidden="true"></span>
+              <span id="recording-pill-text">Recording</span>
+            </div>
+            <p class="recording-timer" id="recording-timer">00:00:00</p>
+          </div>
+
+          <input type="file" id="upload-audio-input" accept="audio/*" style="display: none;" aria-label="Upload audio file" />
+          <div class="card upload-card" id="upload-card" role="button" tabindex="0">
+            <div class="card-inner upload-card">
+              <div class="icon-circle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <div class="text">
+                <h3>Upload Audio</h3>
+                <p>Click to upload from your device.</p>
+              </div>
+            </div>
+          </div>
+
+          <h2 class="section-title" id="recent-title" style="display: none;">Recent Recordings</h2>
+          <div id="recordings-list"></div>
+
+          <!-- Record / Pause / Stop controls (like reference) -->
+          <div class="recording-controls">
+            <button type="button" class="ctrl-btn ctrl-btn-pause" id="btn-pause" title="Pause" aria-label="Pause recording" disabled>
+              <svg class="icon-pause" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              <svg class="icon-play" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <button type="button" class="ctrl-btn ctrl-btn-stop" id="btn-stop" title="Stop" aria-label="Stop recording" disabled>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+            </button>
+            <button type="button" class="ctrl-btn ctrl-btn-record" id="btn-record" title="Record" aria-label="Start recording">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+            </button>
+          </div>
+
+          <div class="home-actions" style="margin-top: 20px;">
+            <button type="button" class="btn-outline" id="btn-history">
+              View History <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings panel -->
+      <section id="panel-settings" class="panel">
+        <div class="page-content">
+          <h1 class="page-title">Settings</h1>
+          <p class="page-subtitle">Appearance, audio, and account.</p>
+
+          <div class="card settings-section">
+            <div class="card-inner">
+              <div class="header">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </div>
+                <div>
+                  <h3 class="title">Appearance</h3>
+                  <p class="subtitle">Dark and light mode</p>
+                </div>
+              </div>
+              <div class="settings-row">
+                <span class="label">Dark mode</span>
+                <button type="button" class="toggle" id="toggle-dark" aria-pressed="false"></button>
+              </div>
+            </div>
+          </div>
+          <div class="card settings-section">
+            <div class="card-inner">
+              <div class="header">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>
+                </div>
+                <div>
+                  <h3 class="title">Audio</h3>
+                  <p class="subtitle">Recording and playback</p>
+                </div>
+              </div>
+              <div class="settings-row">
+                <span class="label">Input device</span>
+                <span class="value">Default</span>
+              </div>
+              <div class="settings-row">
+                <span class="label">Audio quality</span>
+                <span class="value">High</span>
+              </div>
+            </div>
+          </div>
+          <div class="card settings-section">
+            <div class="card-inner">
+              <div class="header">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
+                </div>
+                <div>
+                  <h3 class="title">Account</h3>
+                  <p class="subtitle">Profile and data</p>
+                </div>
+              </div>
+              <button type="button" class="settings-tile" id="settings-edit-profile">Edit profile</button>
+              <button type="button" class="settings-tile">Help & support</button>
+              <div id="settings-delete-error" class="auth-error" style="display: none;" role="alert"></div>
+              <button type="button" class="settings-tile settings-tile--danger" id="settings-delete-account">Delete account</button>
+            </div>
+          </div>
+          <div class="card settings-section">
+            <div class="card-inner">
+              <div class="header">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                </div>
+                <div>
+                  <h3 class="title">System</h3>
+                  <p class="subtitle">System statistics</p>
+                </div>
+              </div>
+              <button type="button" class="settings-tile" id="settings-view-stats">View system stats</button>
+              <div id="settings-stats-error" class="auth-error" style="display: none;" role="alert"></div>
+              <div id="settings-stats-output" class="settings-stats-output" style="display: none;"></div>
+            </div>
+          </div>
+          <p class="settings-version">Voice Sentinel v1.0</p>
+        </div>
+      </section>
+
+      <!-- Change user type panel -->
+      <section id="panel-change-user-type" class="panel">
+        <div class="page-content form-page">
+          <h1 class="page-title">Change user type</h1>
+          <p class="page-subtitle">Select how you use Voice Sentinel.</p>
+          <p class="description">Select your user type</p>
+          <div class="card">
+            <div class="card-inner">
+              <div id="change-user-error" class="auth-error" style="display: none;" role="alert"></div>
+              <div class="input-wrap">
+                <label>User type</label>
+                <select id="change-user-select">
+                  <option value="BASIC">Basic</option>
+                  <option value="TECHNICAL">Technical</option>
+                  <option value="FORENSIC">Forensic</option>
+                </select>
+              </div>
+              <button type="button" class="btn-gradient" id="change-user-save">Save</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Audio breakdown panel -->
+      <section id="panel-audio-breakdown" class="panel">
+        <div class="page-content form-page">
+          <h1 class="page-title">Audio breakdown</h1>
+          <p class="page-subtitle">Detailed breakdown of your uploaded audio.</p>
+          <p style="color: var(--grey-700); font-size: 15px; margin-bottom: 24px;">
+            Select a recording from your history to see its analysis, transcript, and detection results here.
+          </p>
+          <div class="card">
+            <div class="card-inner placeholder-card">
+              <div class="icon-circle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+              </div>
+              <h3>No recording selected</h3>
+              <p>Go to Home and click a completed recording to view its detailed breakdown.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Download mobile app panel -->
+      <section id="panel-download" class="panel">
+        <div class="page-content download-page">
+          <h1 class="page-title">Download mobile app</h1>
+          <p class="page-subtitle">Get Voice Sentinel on your Android device.</p>
+
+          <div class="card download-card">
+            <div class="card-inner">
+              <div class="download-hero">
+                <div class="download-icon-wrap">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                </div>
+                <h2 class="download-heading">Voice Sentinel for Android</h2>
+                <p class="download-desc">Install the app on your phone to record and analyze audio on the go. Same features, full deepfake detection.</p>
+                <a href="downloads/voice-sentinel.apk" class="btn-gradient btn-download" id="download-apk-btn" download>
+                  Download APK
+                </a>
+                <p class="download-note">Requires Android 5.0 or later. You may need to allow installation from unknown sources.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
