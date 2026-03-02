@@ -45,6 +45,18 @@ Matches the Flutter app:
 
 Dark mode is toggled in Settings and persisted in `localStorage`.
 
+## Deploying to Vercel
+
+The app is static (HTML, CSS, JS) and works on Vercel with no code changes:
+
+1. **Connect the repo** to Vercel (Import Git Repository → select `kboat10/VoiceSentinel`).
+2. **Leave build settings as default** — no build command; Vercel will serve the root as a static site.
+3. **API and backend**: The app calls `http://45.55.247.199/api` for auth and user actions. For everything to work from your Vercel URL:
+   - **CORS**: The API server must allow your Vercel origin (e.g. `https://your-app.vercel.app`) in `Access-Control-Allow-Origin`.
+   - **HTTPS (mixed content)**: Vercel serves your site over **HTTPS**. Browsers block requests from HTTPS pages to **HTTP** APIs. So the API at `45.55.247.199` should be reachable over **HTTPS** (or the same host with HTTPS), otherwise login, change password, user type, etc. will fail with network errors. If your API is HTTP-only, consider putting it behind HTTPS (e.g. reverse proxy or your host's SSL) so the Vercel deployment works without changing the app.
+
+Assets (images, CSS, JS) and in-app features (recording, upload, navigation, settings) work the same on Vercel as locally.
+
 ## Next steps (when you add APIs)
 
 - Replace mock “Analyze Audio” / “Stop Recording” with real MediaRecorder or your backend flow.
