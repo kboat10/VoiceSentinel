@@ -114,6 +114,8 @@ function leaveApp() {
   appShell.style.display = 'none';
   welcomeScreen.style.display = 'block';
   welcomeScreen.classList.add('active');
+  if (welcomeContent) welcomeContent.style.display = 'block';
+  if (authContent) authContent.style.display = 'none';
 }
 
 // Map sidebar data-nav to panel keys
@@ -159,6 +161,11 @@ document.getElementById('sidebar-logout')?.addEventListener('click', () => {
   clearAuthToken();
   navTo('welcome');
 });
+
+// --- Restore session on load/refresh: if user has a token, stay in the app instead of showing welcome ---
+if (getAuthToken()) {
+  enterApp();
+}
 
 // --- Welcome / Auth ---
 const welcomeContent = document.getElementById('welcome-content');
