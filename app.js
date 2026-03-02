@@ -1,7 +1,8 @@
 /**
  * Voice Sentinel – Web UI.
- * API base URL for auth and other endpoints.
- * On Vercel we use same-origin /api (proxied in vercel.json) to avoid CORS and mixed content.
+ * API base: local/dev = http://45.55.247.199/api; on Vercel = /api (proxied in vercel.json).
+ * All APIs use this base; none send the user's name.
+ * Endpoints: POST /auth/register, POST /auth/login, GET /user/me, PATCH /user/update, POST /auth/change-password, DELETE /user/terminate, GET /system/stats.
  */
 const API_BASE =
   typeof window !== 'undefined' &&
@@ -50,7 +51,21 @@ function formatNetworkError(err) {
   if (/failed to fetch|network error|load failed|networkrequestfailed/i.test(msg)) {
     return 'Could not reach the server. Check your internet connection and try again. If you\'re opening the app from a different origin, the server may need to allow it (CORS).';
   }
+  if (/ROUTER_EXTERNAL_TARGET_CONNECTION|connection error|target connection/i.test(msg)) {
+    return 'Could not connect to the API. The backend may be unavailable or unreachable. Please try again later.';
+  }
   return msg || 'Network error. Please try again.';
+}
+/** If response body indicates a proxy/connection failure, return a user-friendly message; otherwise return null. */
+function formatApiConnectionError(res, text) {
+  if (!text || typeof text !== 'string') return null;
+  if (/ROUTER_EXTERNAL_TARGET_CONNECTION|connection error|target connection|could not connect/i.test(text)) {
+    return 'Could not connect to the API. The backend may be unavailable or unreachable. Please try again later.';
+  }
+  if (res.status >= 502 && res.status <= 504) {
+    return 'The API is temporarily unavailable. Please try again in a moment.';
+  }
+  return null;
 }
 
 // --- State (UI only) ---
@@ -272,10 +287,13 @@ async function handleRegister() {
       return;
     }
 
-    const errMsg = (typeof data === 'object' && (data?.detail || data?.message)) || (typeof data === 'string' && data) || `Registration failed (${res.status}). Please try again.`;
-    showAuthError(errMsg);
+    const connectionErr = formatApiConnectionError(res, text);
+    let errMsg = connectionErr;
+    if (!errMsg && typeof data === 'object' && (data?.detail || data?.message)) errMsg = typeof data.detail === 'string' ? data.detail : (data.message || '');
+    if (!errMsg && typeof data === 'string' && data && !/ROUTER_EXTERNAL_TARGET_CONNECTION/i.test(data)) errMsg = data;
+    showAuthError(errMsg || `Registration failed (${res.status}). Please try again.`);
   } catch (err) {
-    showAuthError(err.message || 'Network error. Please check your connection and try again.');
+    showAuthError(formatNetworkError(err));
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
@@ -344,10 +362,13 @@ async function handleLogin() {
       return;
     }
 
-    const errMsg = (typeof data === 'object' && (data?.detail || data?.message)) || (typeof data === 'string' && data) || `Login failed (${res.status}). Please try again.`;
-    showAuthError(errMsg);
+    const connectionErr = formatApiConnectionError(res, text);
+    let errMsg = connectionErr;
+    if (!errMsg && typeof data === 'object' && (data?.detail || data?.message)) errMsg = typeof data.detail === 'string' ? data.detail : (data.message || '');
+    if (!errMsg && typeof data === 'string' && data && !/ROUTER_EXTERNAL_TARGET_CONNECTION/i.test(data)) errMsg = data;
+    showAuthError(errMsg || `Login failed (${res.status}). Please try again.`);
   } catch (err) {
-    showAuthError(err.message || 'Network error. Please check your connection and try again.');
+    showAuthError(formatNetworkError(err));
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
@@ -497,8 +518,10 @@ function showEditProfileError(message) {
   }
 }
 
-/** Parse API error body: supports HTTPValidationError (detail[]) and ValidationError (single detail). */
+/** Parse API error body: supports HTTPValidationError (detail[]), ValidationError, proxy/connection errors, and 5xx. */
 function parseApiError(res, text) {
+  const connectionErr = formatApiConnectionError(res, text);
+  if (connectionErr) return connectionErr;
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (res.status === 422 && data && data.detail != null) {
@@ -506,7 +529,10 @@ function parseApiError(res, text) {
     const messages = details.map((d) => (d && typeof d.msg === 'string' ? d.msg : 'Validation error')).filter(Boolean);
     if (messages.length) return messages.join(' ');
   }
-  return (typeof data === 'object' && (data?.detail || data?.message)) ? (typeof data.detail === 'string' ? data.detail : data.message || JSON.stringify(data.detail)) : `Request failed (${res.status}). Try again.`;
+  const serverMsg = typeof data === 'object' && data && (typeof data.detail === 'string' ? data.detail : data.message);
+  if (serverMsg) return serverMsg;
+  if (res.status >= 500) return `Server error (${res.status}). The server had a problem. Please try again in a moment.`;
+  return `Request failed (${res.status}). Try again.`;
 }
 
 /**
