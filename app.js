@@ -1,9 +1,14 @@
 /**
  * Voice Sentinel – Web UI.
  * API base URL for auth and other endpoints.
+ * On Vercel we use same-origin /api (proxied in vercel.json) to avoid CORS and mixed content.
  */
-
-const API_BASE = 'http://45.55.247.199/api';
+const API_BASE =
+  typeof window !== 'undefined' &&
+  window.location &&
+  window.location.hostname.endsWith('vercel.app')
+    ? '/api'
+    : 'http://45.55.247.199/api';
 
 const AUTH_TOKEN_KEY = 'voiceSentinelToken';
 
@@ -225,6 +230,7 @@ async function handleRegister() {
   }
 
   try {
+    // API: email, password, level only — name is never sent; stored locally after success.
     const body = new URLSearchParams({
       email,
       password,
@@ -418,6 +424,7 @@ document.getElementById('change-user-save')?.addEventListener('click', async () 
 
 // --- Edit profile modal (Settings) ---
 const EDIT_PROFILE_STORAGE_KEY = 'voiceSentinelUserType';
+/** Name is stored in localStorage only; never sent to register, login, or any other API. Updated on sign-up and when user changes it in Edit profile. */
 const USER_NAME_STORAGE_KEY = 'voiceSentinelUserName';
 /** Initial user type when the edit profile modal was opened; used to detect level change. */
 let editProfileInitialLevel = null;
@@ -534,7 +541,7 @@ async function handleEditProfileSave() {
     return;
   }
 
-  // Name: local only — save first and never send to API; does not affect password or user type APIs.
+  // Name: stored locally only; never sent to change-password or user/update APIs. When user updates name, we only update the stored version here.
   if (wantNameChange) {
     try { localStorage.setItem(USER_NAME_STORAGE_KEY, name); } catch (_) {}
   }

@@ -51,9 +51,10 @@ The app is static (HTML, CSS, JS) and works on Vercel with no code changes:
 
 1. **Connect the repo** to Vercel (Import Git Repository → select `kboat10/VoiceSentinel`).
 2. **Leave build settings as default** — no build command; Vercel will serve the root as a static site.
-3. **API and backend**: The app calls `http://45.55.247.199/api` for auth and user actions. For everything to work from your Vercel URL:
-   - **CORS**: The API server must allow your Vercel origin (e.g. `https://your-app.vercel.app`) in `Access-Control-Allow-Origin`.
-   - **HTTPS (mixed content)**: Vercel serves your site over **HTTPS**. Browsers block requests from HTTPS pages to **HTTP** APIs. So the API at `45.55.247.199` should be reachable over **HTTPS** (or the same host with HTTPS), otherwise login, change password, user type, etc. will fail with network errors. If your API is HTTP-only, consider putting it behind HTTPS (e.g. reverse proxy or your host's SSL) so the Vercel deployment works without changing the app.
+3. **API, CORS, and HTTPS**: The app talks to `http://45.55.247.199/api` for auth and user actions. On Vercel, **CORS and mixed content are handled for you**:
+   - **vercel.json** rewrites `/api/*` to `http://45.55.247.199/api/*`, so the browser only sends same-origin requests to your Vercel domain (no CORS).
+   - The app automatically uses the proxy (base URL `/api`) when `hostname` ends with `vercel.app`, so login, change password, user type, delete account, and system stats work without changing the backend.
+   - Locally, the app still calls `http://45.55.247.199/api` directly (no proxy).
 
 Assets (images, CSS, JS) and in-app features (recording, upload, navigation, settings) work the same on Vercel as locally.
 
