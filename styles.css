@@ -658,6 +658,7 @@ body {
   font-weight: 700;
 }
 
+
 .welcome-buttons .btn-gradient,
 .welcome-buttons .btn-outline {
   margin-bottom: 12px;
@@ -1290,6 +1291,31 @@ body {
   font-size: 14px;
   color: var(--grey-700);
   margin: 0;
+}
+
+.history-loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--grey-600);
+  font-size: 15px;
+}
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.history-entry .card-inner {
+  padding: 16px 20px;
+}
+.history-entry-json,
+.history-entry-text {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dark-text);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Review Recording modal */

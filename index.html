@@ -34,6 +34,7 @@
       <div class="review-transcription-wrap">
         <p class="review-transcription" id="review-transcription">Transcription will appear here after analysis.</p>
       </div>
+      <div id="review-error" class="auth-error" style="display: none;" role="alert"></div>
 
       <div class="review-modal-actions">
         <button type="button" class="btn-review-rerecord" id="review-rerecord-btn">Re-record</button>
@@ -389,13 +390,16 @@
           <p style="color: var(--grey-700); font-size: 15px; margin-bottom: 24px;">
             Select a recording from your history to see its analysis, transcript, and detection results here.
           </p>
-          <div class="card">
+          <div id="history-error" class="auth-error" style="display: none;" role="alert"></div>
+          <div id="history-loading" class="history-loading" style="display: none;">Loading history…</div>
+          <div id="history-list" class="history-list" style="display: none;"></div>
+          <div class="card" id="history-placeholder-card">
             <div class="card-inner placeholder-card">
               <div class="icon-circle">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
               </div>
               <h3>No recording selected</h3>
-              <p>Go to Home and click a completed recording to view its detailed breakdown.</p>
+              <p>Go to Home and click <strong>View History</strong> to load your analysis history from the server.</p>
             </div>
           </div>
         </div>

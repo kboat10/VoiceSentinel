@@ -2,7 +2,7 @@
  * Voice Sentinel – Web UI.
  * API base: local/dev = http://45.55.247.199/api; on Vercel = /api (proxied in vercel.json).
  * All APIs use this base; none send the user's name.
- * Endpoints: POST /auth/register, POST /auth/login, GET /user/me, PATCH /user/update, POST /auth/change-password, DELETE /user/terminate, GET /system/stats.
+ * Endpoints: POST /auth/register, POST /auth/login, GET /user/me, PATCH /user/update, POST /auth/change-password, DELETE /user/terminate, GET /system/stats, POST /forensics/predict (multipart: file, user_id).
  */
 const API_BASE =
   typeof window !== 'undefined' &&
@@ -89,6 +89,10 @@ const state = {
   recordedChunks: [],
   recordedBlob: null,
   reviewAudioUrl: null,
+  /** Current blob/file in review modal (for POST forensics/predict). */
+  reviewBlob: null,
+  /** User id from GET /user/me (for forensics API). */
+  userId: null,
 };
 
 // --- DOM ---
@@ -162,9 +166,21 @@ document.getElementById('sidebar-logout')?.addEventListener('click', () => {
   navTo('welcome');
 });
 
-// --- Restore session on load/refresh: if user has a token, stay in the app instead of showing welcome ---
+// --- Restore session on load/refresh: if user has a token, stay in the app and fetch user id for forensics ---
 if (getAuthToken()) {
   enterApp();
+  (async () => {
+    try {
+      const res = await apiFetch('user/me', { method: 'GET' });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+      if (res.ok && data && typeof data === 'object') {
+        const id = data.id ?? data.user_id ?? data.userId;
+        if (id != null) state.userId = Number(id);
+      }
+    } catch (_) {}
+  })();
 }
 
 // --- Welcome / Auth ---
@@ -497,6 +513,8 @@ async function openEditProfileModal() {
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
     if (res.ok && data && typeof data === 'object') {
+      const id = data.id ?? data.user_id ?? data.userId;
+      if (id != null) state.userId = Number(id);
       const level = data.level ?? data.user_type ?? data.userType;
       if (level && userTypeSelect) {
         const opt = Array.from(userTypeSelect.options).find((o) => o.value === level);
@@ -1071,7 +1089,10 @@ function openReviewModal(blob) {
   if (transcriptionEl) {
     transcriptionEl.textContent = 'Transcription will appear here after analysis.';
   }
+  const reviewErrorEl = document.getElementById('review-error');
+  if (reviewErrorEl) { reviewErrorEl.style.display = 'none'; reviewErrorEl.textContent = ''; }
 
+  state.reviewBlob = blob || null;
   if (blob && audio) {
     state.reviewAudioUrl = URL.createObjectURL(blob);
     audio.src = state.reviewAudioUrl;
@@ -1121,6 +1142,7 @@ function closeReviewModal() {
     URL.revokeObjectURL(state.reviewAudioUrl);
     state.reviewAudioUrl = null;
   }
+  state.reviewBlob = null;
   if (playBtn) {
     playBtn.disabled = true;
     const iconPlay = playBtn.querySelector('.review-icon-play');
@@ -1153,14 +1175,49 @@ function toggleReviewPlayback() {
   }
 }
 
-function submitRecordingFromReview() {
+async function submitRecordingFromReview() {
+  const blob = state.reviewBlob;
+  const submitBtn = document.getElementById('review-submit-btn');
+  const reviewErrorEl = document.getElementById('review-error');
+  const transcriptionEl = document.getElementById('review-transcription');
+  if (reviewErrorEl) { reviewErrorEl.style.display = 'none'; reviewErrorEl.textContent = ''; }
+
   const duration = formatDuration(pendingReviewDuration);
   const name = pendingReviewFileName || `Recording ${state.recordings.length + 1}`;
-  state.recordings.unshift({
-    name,
-    duration,
-    status: 'analyzing',
-  });
+
+  if (blob) {
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
+    const formData = new FormData();
+    const filename = blob instanceof File ? blob.name : 'recording.webm';
+    formData.append('file', blob, filename);
+    formData.append('user_id', String(state.userId ?? 0));
+    try {
+      const res = await apiFetch('forensics/predict', {
+        method: 'POST',
+        body: formData,
+      });
+      const text = await res.text();
+      if (res.ok) {
+        if (transcriptionEl) transcriptionEl.textContent = typeof text === 'string' && text ? text : 'Analysis complete.';
+        state.recordings.unshift({ name, duration, status: 'completed' });
+        closeReviewModal();
+        renderRecordings();
+        return;
+      }
+      const errMsg = parseApiError(res, text);
+      if (reviewErrorEl) { reviewErrorEl.textContent = errMsg; reviewErrorEl.style.display = 'block'; }
+    } catch (err) {
+      if (reviewErrorEl) {
+        reviewErrorEl.textContent = formatNetworkError(err);
+        reviewErrorEl.style.display = 'block';
+      }
+    } finally {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit'; }
+    }
+    return;
+  }
+
+  state.recordings.unshift({ name, duration, status: 'analyzing' });
   closeReviewModal();
   renderRecordings();
   setTimeout(() => {
@@ -1272,4 +1329,60 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-document.getElementById('btn-history')?.addEventListener('click', () => {});
+// --- View History: fetch GET /forensics/history and show in Audio breakdown panel ---
+document.getElementById('btn-history')?.addEventListener('click', async () => {
+  const listEl = document.getElementById('history-list');
+  const errorEl = document.getElementById('history-error');
+  const loadingEl = document.getElementById('history-loading');
+  const placeholderCard = document.getElementById('history-placeholder-card');
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (listEl) listEl.style.display = 'none';
+  if (placeholderCard) placeholderCard.style.display = 'none';
+  if (loadingEl) { loadingEl.style.display = 'block'; loadingEl.textContent = 'Loading history…'; }
+  navTo('audio-breakdown');
+  try {
+    const res = await apiFetch('forensics/history');
+    const text = await res.text();
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (!res.ok) {
+      if (errorEl) {
+        errorEl.textContent = parseApiError(res, text);
+        errorEl.style.display = 'block';
+      }
+      if (placeholderCard) placeholderCard.style.display = 'block';
+      return;
+    }
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    if (listEl) {
+      listEl.innerHTML = '';
+      if (Array.isArray(data) && data.length > 0) {
+        data.forEach((item, i) => {
+          const entry = document.createElement('div');
+          entry.className = 'card history-entry';
+          if (typeof item === 'object' && item !== null) {
+            entry.innerHTML = `<div class="card-inner"><pre class="history-entry-json">${escapeHtml(JSON.stringify(item, null, 2))}</pre></div>`;
+          } else {
+            entry.innerHTML = `<div class="card-inner"><p class="history-entry-text">${escapeHtml(String(item))}</p></div>`;
+          }
+          listEl.appendChild(entry);
+        });
+      } else if (Array.isArray(data)) {
+        listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>No history yet. Record or upload audio and submit to see entries here.</p></div></div>';
+      } else if (data !== null && data !== '') {
+        listEl.innerHTML = `<div class="card"><div class="card-inner"><pre class="history-entry-json">${escapeHtml(typeof data === 'object' ? JSON.stringify(data, null, 2) : String(data))}</pre></div></div>`;
+      } else {
+        listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>No history yet. Record or upload audio and submit to see entries here.</p></div></div>';
+      }
+      listEl.style.display = 'block';
+    }
+    if (placeholderCard) placeholderCard.style.display = 'none';
+  } catch (err) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl) {
+      errorEl.textContent = formatNetworkError(err);
+      errorEl.style.display = 'block';
+    }
+    if (placeholderCard) placeholderCard.style.display = 'block';
+  }
+});
