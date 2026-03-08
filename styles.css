@@ -1248,6 +1248,131 @@ body {
   max-height: 320px;
   overflow: auto;
 }
+/* Prediction result card on Audio Breakdown page */
+.prediction-result-card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+.prediction-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 16px;
+  color: var(--dark-text);
+}
+.prediction-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.prediction-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.prediction-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--grey-600);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  flex-shrink: 0;
+}
+.prediction-value {
+  font-size: 14px;
+  color: var(--dark-text);
+  text-align: right;
+  word-break: break-word;
+}
+.prediction-value a {
+  color: var(--primary-blue);
+  text-decoration: underline;
+}
+.prediction-verdict--real {
+  color: #16a34a;
+  font-weight: 700;
+}
+.prediction-verdict--synthetic {
+  color: #dc2626;
+  font-weight: 700;
+}
+.local-sample-entry {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+.local-sample-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.local-sample-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--dark-text);
+}
+.local-sample-date {
+  font-size: 12px;
+  color: var(--grey-600);
+}
+.local-sample-details {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--grey-700);
+}
+.local-sample-verdict {
+  font-weight: 600;
+}
+
+/* About Me mini page in Settings */
+.about-me-panel {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  padding: 18px 20px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.about-me-loading {
+  color: var(--grey-600);
+  font-size: 14px;
+  text-align: center;
+  padding: 12px 0;
+}
+.about-me-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.about-me-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.about-me-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--grey-600);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  flex-shrink: 0;
+}
+.about-me-value {
+  font-size: 14px;
+  color: var(--dark-text);
+  text-align: right;
+  word-break: break-word;
+}
+
 .settings-version {
   text-align: center;
   color: var(--grey-600);

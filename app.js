@@ -12,21 +12,80 @@ const API_BASE =
     : 'http://45.55.247.199/api';
 
 const AUTH_TOKEN_KEY = 'voiceSentinelToken';
+const USER_ID_KEY = 'voiceSentinelUserId';
+const USER_EMAIL_KEY = 'voiceSentinelEmail';
+const SAMPLES_STORAGE_KEY = 'voiceSentinelSamples';
+
+const ALLOWED_AUDIO_TYPES = ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3'];
+const ALLOWED_AUDIO_EXTS = ['.wav', '.mp3'];
+
+function isAllowedAudioFile(file) {
+  if (!file) return false;
+  const ext = (file.name || '').toLowerCase().replace(/^.*(\.\w+)$/, '$1');
+  return ALLOWED_AUDIO_TYPES.includes(file.type) || ALLOWED_AUDIO_EXTS.includes(ext);
+}
+
+function sampleStorageKey(uid) {
+  return `${SAMPLES_STORAGE_KEY}_${uid}`;
+}
+
+function getSavedSamples(uid) {
+  const id = uid ?? state.userId ?? getStoredUserId();
+  if (id == null) return [];
+  try {
+    const raw = localStorage.getItem(sampleStorageKey(id));
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveSampleFootprint(entry) {
+  const uid = entry.user_id ?? state.userId ?? getStoredUserId();
+  if (uid == null) return;
+  try {
+    const samples = getSavedSamples(uid);
+    samples.unshift(entry);
+    if (samples.length > 200) samples.length = 200;
+    localStorage.setItem(sampleStorageKey(uid), JSON.stringify(samples));
+  } catch (_) {}
+}
 
 /** Returns the stored auth token, or null if not logged in. */
 function getAuthToken() {
+  try { return localStorage.getItem(AUTH_TOKEN_KEY); } catch { return null; }
+}
+
+/** Returns the stored user id as a number, or null. */
+function getStoredUserId() {
   try {
-    return localStorage.getItem(AUTH_TOKEN_KEY);
-  } catch {
-    return null;
+    const v = localStorage.getItem(USER_ID_KEY);
+    return v != null ? Number(v) : null;
+  } catch { return null; }
+}
+
+/** Returns the stored user email, or null. */
+function getStoredEmail() {
+  try { return localStorage.getItem(USER_EMAIL_KEY); } catch { return null; }
+}
+
+/** Persist user id and email to localStorage + state. */
+function storeUserIdentity(id, email) {
+  if (id != null) {
+    state.userId = Number(id);
+    try { localStorage.setItem(USER_ID_KEY, String(id)); } catch (_) {}
+  }
+  if (email) {
+    try { localStorage.setItem(USER_EMAIL_KEY, email); } catch (_) {}
   }
 }
 
-/** Clears the stored auth token (e.g. on log out). */
+/** Clears all auth-related storage (token, user id, email). */
 function clearAuthToken() {
   try {
     localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(USER_ID_KEY);
+    localStorage.removeItem(USER_EMAIL_KEY);
   } catch (_) {}
+  state.userId = null;
 }
 
 /**
@@ -166,18 +225,22 @@ document.getElementById('sidebar-logout')?.addEventListener('click', () => {
   navTo('welcome');
 });
 
-// --- Restore session on load/refresh: if user has a token, stay in the app and fetch user id for forensics ---
+// --- Restore session on load/refresh: load identity from localStorage, then confirm from API ---
 if (getAuthToken()) {
+  const storedId = getStoredUserId();
+  if (storedId != null) state.userId = storedId;
   enterApp();
   (async () => {
     try {
-      const res = await apiFetch('user/me', { method: 'GET' });
+      const uid = state.userId ?? getStoredUserId();
+      if (uid == null) return;
+      const res = await apiFetch(`user/me?user_id=${encodeURIComponent(uid)}`, { method: 'GET' });
       const text = await res.text();
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = text; }
       if (res.ok && data && typeof data === 'object') {
         const id = data.id ?? data.user_id ?? data.userId;
-        if (id != null) state.userId = Number(id);
+        storeUserIdentity(id, data.email);
       }
     } catch (_) {}
   })();
@@ -295,7 +358,14 @@ async function handleRegister() {
         localStorage.setItem(EDIT_PROFILE_STORAGE_KEY, level);
         if (name) localStorage.setItem(USER_NAME_STORAGE_KEY, name);
       } catch (_) {}
+      const userId = data && typeof data === 'object' ? (data.user_id ?? data.id ?? data.userId) : null;
+      storeUserIdentity(userId, email);
       enterApp();
+      return;
+    }
+
+    if (res.status === 409) {
+      showAuthError('An account with this email already exists. Sign in instead or use a different email.');
       return;
     }
 
@@ -368,13 +438,21 @@ async function handleLogin() {
     }
 
     if (res.ok) {
-      if (typeof data === 'string' && data) {
+      if (data && typeof data === 'object') {
+        // token field = user_id (used as auth token for all routes)
+        const token = data.token ?? data.access_token;
+        if (token) try { localStorage.setItem(AUTH_TOKEN_KEY, String(token)); } catch (_) {}
+        storeUserIdentity(token, email);
+      } else if (typeof data === 'string' && data) {
         try { localStorage.setItem(AUTH_TOKEN_KEY, data); } catch (_) {}
-      } else if (data && typeof data === 'object' && (data.access_token ?? data.token)) {
-        const token = data.access_token ?? data.token;
-        try { localStorage.setItem(AUTH_TOKEN_KEY, token); } catch (_) {}
+        storeUserIdentity(data, email);
       }
       enterApp();
+      return;
+    }
+
+    if (res.status === 401) {
+      showAuthError('Invalid email or password.');
       return;
     }
 
@@ -440,11 +518,17 @@ document.getElementById('change-user-save')?.addEventListener('click', async () 
   const errorEl = document.getElementById('change-user-error');
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
   if (saveBtn) saveBtn.disabled = true;
+  const userId = state.userId ?? getStoredUserId();
+  if (userId == null) {
+    if (errorEl) { errorEl.textContent = 'Could not determine your account. Please log out and log in again.'; errorEl.style.display = 'block'; }
+    if (saveBtn) saveBtn.disabled = false;
+    return;
+  }
   try {
     const res = await apiFetch('user/update', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ level }).toString(),
+      body: new URLSearchParams({ user_id: String(userId), level }).toString(),
     });
     const text = await res.text();
     if (res.ok) {
@@ -508,14 +592,16 @@ async function openEditProfileModal() {
   editProfileInitialLevel = userTypeSelect?.value ?? 'BASIC';
   if (!getAuthToken()) return;
   try {
-    const res = await apiFetch('user/me', { method: 'GET' });
+    const uid = state.userId ?? getStoredUserId();
+    if (uid == null) return;
+    const res = await apiFetch(`user/me?user_id=${encodeURIComponent(uid)}`, { method: 'GET' });
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
     if (res.ok && data && typeof data === 'object') {
       const id = data.id ?? data.user_id ?? data.userId;
-      if (id != null) state.userId = Number(id);
-      const level = data.level ?? data.user_type ?? data.userType;
+      storeUserIdentity(id, data.email);
+      const level = data.preferred_explanation_level ?? data.level ?? data.user_type ?? data.userType;
       if (level && userTypeSelect) {
         const opt = Array.from(userTypeSelect.options).find((o) => o.value === level);
         if (opt) userTypeSelect.value = level;
@@ -612,9 +698,15 @@ async function handleEditProfileSave() {
   }
 
   try {
-    // API: change password only when user chose to change it.
+    // API: change password only when user chose to change it. user_id is passed automatically from the stored identity.
     if (wantPasswordChange) {
-      const body = new URLSearchParams({ old: currentPassword, new: newPassword });
+      const userId = state.userId ?? getStoredUserId();
+      if (userId == null) {
+        showEditProfileError('Could not determine your account. Please log out and log in again.');
+        if (saveBtn) saveBtn.disabled = false;
+        return;
+      }
+      const body = new URLSearchParams({ user_id: String(userId), old: currentPassword, new: newPassword });
       const res = await apiFetch('auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -622,18 +714,28 @@ async function handleEditProfileSave() {
       });
       const text = await res.text();
       if (!res.ok) {
-        showEditProfileError(parseApiError(res, text));
+        if (res.status === 403) {
+          showEditProfileError('Current password is incorrect.');
+        } else {
+          showEditProfileError(parseApiError(res, text));
+        }
         if (saveBtn) saveBtn.disabled = false;
         return;
       }
     }
 
-    // API: update user type only when user chose to change it.
+    // API: update user type only when user chose to change it. user_id is passed automatically.
     if (wantLevelChange) {
+      const userId = state.userId ?? getStoredUserId();
+      if (userId == null) {
+        showEditProfileError('Could not determine your account. Please log out and log in again.');
+        if (saveBtn) saveBtn.disabled = false;
+        return;
+      }
       const res = await apiFetch('user/update', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ level }).toString(),
+        body: new URLSearchParams({ user_id: String(userId), level }).toString(),
       });
 
       if (res.ok) {
@@ -662,6 +764,56 @@ document.getElementById('edit-profile-overlay')?.addEventListener('click', (e) =
   if (e.target.id === 'edit-profile-overlay') closeEditProfileModal();
 });
 
+// --- Settings: About Me ---
+document.getElementById('settings-about-me')?.addEventListener('click', async () => {
+  const panel = document.getElementById('about-me-panel');
+  const loadingEl = document.getElementById('about-me-loading');
+  const contentEl = document.getElementById('about-me-content');
+  const errorEl = document.getElementById('about-me-error');
+
+  if (panel && panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    return;
+  }
+
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (loadingEl) loadingEl.style.display = '';
+  if (contentEl) contentEl.style.display = 'none';
+  if (panel) panel.style.display = '';
+
+  const userId = state.userId ?? getStoredUserId();
+  if (userId == null) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (panel) panel.style.display = 'none';
+    if (errorEl) { errorEl.textContent = 'Could not determine your account. Please log out and log in again.'; errorEl.style.display = ''; }
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`user/me?user_id=${encodeURIComponent(userId)}`);
+    const text = await res.text();
+    if (!res.ok) {
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (errorEl) { errorEl.textContent = parseApiError(res, text); errorEl.style.display = ''; }
+      if (panel) panel.style.display = 'none';
+      return;
+    }
+    const data = JSON.parse(text);
+    document.getElementById('about-me-uid').textContent = data.user_id ?? '—';
+    document.getElementById('about-me-email').textContent = data.email ?? '—';
+    document.getElementById('about-me-level').textContent = data.preferred_explanation_level ?? '—';
+    const created = data.created_at;
+    document.getElementById('about-me-created').textContent = created ? new Date(created).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '—';
+
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (contentEl) contentEl.style.display = '';
+  } catch (err) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (panel) panel.style.display = 'none';
+    if (errorEl) { errorEl.textContent = formatNetworkError(err); errorEl.style.display = ''; }
+  }
+});
+
 // --- Settings: Delete account ---
 document.getElementById('settings-delete-account')?.addEventListener('click', async () => {
   if (!confirm('Permanently delete your account? This cannot be undone.')) return;
@@ -669,8 +821,18 @@ document.getElementById('settings-delete-account')?.addEventListener('click', as
   const errorEl = document.getElementById('settings-delete-error');
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
   if (btn) btn.disabled = true;
+  const userId = state.userId ?? getStoredUserId();
+  if (userId == null) {
+    if (errorEl) { errorEl.textContent = 'Could not determine your account. Please log out and log in again.'; errorEl.style.display = 'block'; }
+    if (btn) btn.disabled = false;
+    return;
+  }
   try {
-    const res = await apiFetch('user/terminate', { method: 'DELETE' });
+    const res = await apiFetch('user/terminate', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ user_id: String(userId) }).toString(),
+    });
     const text = await res.text();
     if (res.ok) {
       clearAuthToken();
@@ -1175,6 +1337,53 @@ function toggleReviewPlayback() {
   }
 }
 
+function showPredictionResult(data) {
+  const card = document.getElementById('prediction-result');
+  if (!card) return;
+  document.getElementById('pred-sample-id').textContent = data.sample_id ?? '—';
+  const verdictEl = document.getElementById('pred-verdict');
+  const v = data.verdict ?? '—';
+  verdictEl.textContent = v;
+  verdictEl.className = 'prediction-value';
+  if (v === 'Real') verdictEl.classList.add('prediction-verdict--real');
+  else if (v === 'Synthetic') verdictEl.classList.add('prediction-verdict--synthetic');
+  document.getElementById('pred-confidence').textContent = data.confidence != null ? `${(data.confidence * 100).toFixed(1)}%` : '—';
+  const urlEl = document.getElementById('pred-analysis-url');
+  if (data.analysis_url) {
+    urlEl.innerHTML = `<a href="${escapeHtml(data.analysis_url)}" target="_blank" rel="noopener">View analysis</a>`;
+  } else {
+    urlEl.textContent = '—';
+  }
+  document.getElementById('pred-filename').textContent = data.filename ?? '—';
+  card.style.display = '';
+}
+
+function renderLocalSamples() {
+  const section = document.getElementById('local-samples-section');
+  const listEl = document.getElementById('local-samples-list');
+  if (!section || !listEl) return;
+  const samples = getSavedSamples();
+  if (samples.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  listEl.innerHTML = '';
+  samples.forEach((s) => {
+    const el = document.createElement('div');
+    el.className = 'local-sample-entry';
+    const dateStr = s.date ? new Date(s.date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const confStr = s.confidence != null ? `${(s.confidence * 100).toFixed(1)}%` : '—';
+    const verdictClass = s.verdict === 'Real' ? 'prediction-verdict--real' : s.verdict === 'Synthetic' ? 'prediction-verdict--synthetic' : '';
+    el.innerHTML =
+      `<div class="local-sample-header"><span class="local-sample-name">${escapeHtml(s.filename || '—')}</span><span class="local-sample-date">${escapeHtml(dateStr)}</span></div>` +
+      `<div class="local-sample-details">` +
+      `<span class="local-sample-verdict ${verdictClass}">${escapeHtml(s.verdict || '—')}</span>` +
+      `<span>Confidence: ${escapeHtml(confStr)}</span>` +
+      `<span>${escapeHtml(s.source === 'upload' ? 'Uploaded' : 'Recorded')}</span>` +
+      (s.sample_id ? `<span>ID: ${escapeHtml(String(s.sample_id))}</span>` : '') +
+      `</div>`;
+    listEl.appendChild(el);
+  });
+}
+
 async function submitRecordingFromReview() {
   const blob = state.reviewBlob;
   const submitBtn = document.getElementById('review-submit-btn');
@@ -1185,46 +1394,83 @@ async function submitRecordingFromReview() {
   const duration = formatDuration(pendingReviewDuration);
   const name = pendingReviewFileName || `Recording ${state.recordings.length + 1}`;
 
-  if (blob) {
-    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
-    const formData = new FormData();
-    const filename = blob instanceof File ? blob.name : 'recording.webm';
-    formData.append('file', blob, filename);
-    formData.append('user_id', String(state.userId ?? 0));
-    try {
-      const res = await apiFetch('forensics/predict', {
-        method: 'POST',
-        body: formData,
-      });
-      const text = await res.text();
-      if (res.ok) {
-        if (transcriptionEl) transcriptionEl.textContent = typeof text === 'string' && text ? text : 'Analysis complete.';
-        state.recordings.unshift({ name, duration, status: 'completed' });
-        closeReviewModal();
-        renderRecordings();
-        return;
-      }
-      const errMsg = parseApiError(res, text);
-      if (reviewErrorEl) { reviewErrorEl.textContent = errMsg; reviewErrorEl.style.display = 'block'; }
-    } catch (err) {
-      if (reviewErrorEl) {
-        reviewErrorEl.textContent = formatNetworkError(err);
-        reviewErrorEl.style.display = 'block';
-      }
-    } finally {
-      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit'; }
-    }
+  if (!blob) {
+    if (reviewErrorEl) { reviewErrorEl.textContent = 'No audio to submit.'; reviewErrorEl.style.display = 'block'; }
     return;
   }
 
-  state.recordings.unshift({ name, duration, status: 'analyzing' });
-  closeReviewModal();
-  renderRecordings();
-  setTimeout(() => {
-    const r = state.recordings.find((x) => x.status === 'analyzing');
-    if (r) r.status = 'completed';
-    renderRecordings();
-  }, 2000);
+  if (blob instanceof File && !isAllowedAudioFile(blob)) {
+    if (reviewErrorEl) { reviewErrorEl.textContent = 'Only WAV and MP3 files are accepted. Please upload a .wav or .mp3 file.'; reviewErrorEl.style.display = 'block'; }
+    return;
+  }
+
+  const userId = state.userId ?? getStoredUserId();
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Analyzing…'; }
+
+  const formData = new FormData();
+  const filename = blob instanceof File ? blob.name : 'recording.wav';
+  formData.append('file', blob, filename);
+  if (userId != null) formData.append('user_id', String(userId));
+
+  try {
+    const res = await apiFetch('forensics/predict', {
+      method: 'POST',
+      body: formData,
+    });
+    const text = await res.text();
+
+    if (res.ok) {
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+      const sampleId = data?.sample_id ?? null;
+      const verdict = data?.verdict ?? null;
+      const confidence = data?.confidence ?? null;
+      const analysisUrl = data?.analysis_url ?? null;
+
+      if (transcriptionEl) {
+        transcriptionEl.textContent = verdict
+          ? `Verdict: ${verdict}` + (confidence != null ? ` (confidence: ${(confidence * 100).toFixed(1)}%)` : '')
+          : 'Analysis complete.';
+      }
+
+      const footprint = {
+        user_id: userId,
+        sample_id: sampleId,
+        filename: name,
+        verdict,
+        confidence,
+        analysis_url: analysisUrl,
+        source: blob instanceof File ? 'upload' : 'recording',
+        date: new Date().toISOString(),
+      };
+      saveSampleFootprint(footprint);
+
+      state.recordings.unshift({ name, duration, status: 'completed', verdict, confidence, sampleId });
+      closeReviewModal();
+      renderRecordings();
+      showPredictionResult(footprint);
+      renderLocalSamples();
+      navTo('audio-breakdown');
+      return;
+    }
+
+    if (res.status === 415) {
+      if (reviewErrorEl) { reviewErrorEl.textContent = 'Unsupported audio format. Only WAV and MP3 files are accepted.'; reviewErrorEl.style.display = 'block'; }
+    } else if (res.status === 500) {
+      if (reviewErrorEl) { reviewErrorEl.textContent = 'Server processing error. Please try again in a moment.'; reviewErrorEl.style.display = 'block'; }
+    } else {
+      const errMsg = parseApiError(res, text);
+      if (reviewErrorEl) { reviewErrorEl.textContent = errMsg; reviewErrorEl.style.display = 'block'; }
+    }
+  } catch (err) {
+    if (reviewErrorEl) {
+      reviewErrorEl.textContent = formatNetworkError(err);
+      reviewErrorEl.style.display = 'block';
+    }
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit'; }
+  }
 }
 
 document.getElementById('btn-record')?.addEventListener('click', () => {
@@ -1275,7 +1521,9 @@ document.getElementById('upload-card')?.addEventListener('keydown', (e) => {
 uploadAudioInput?.addEventListener('change', () => {
   const file = uploadAudioInput.files?.[0];
   if (!file) return;
-  if (!file.type.startsWith('audio/')) {
+  if (!isAllowedAudioFile(file)) {
+    alert('Only WAV and MP3 files are accepted. Please select a .wav or .mp3 file.');
+    uploadAudioInput.value = '';
     return;
   }
   pendingReviewDuration = 0;
@@ -1338,6 +1586,7 @@ document.getElementById('btn-history')?.addEventListener('click', async () => {
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
   if (listEl) listEl.style.display = 'none';
   if (placeholderCard) placeholderCard.style.display = 'none';
+  renderLocalSamples();
   if (loadingEl) { loadingEl.style.display = 'block'; loadingEl.textContent = 'Loading history…'; }
   navTo('audio-breakdown');
   try {

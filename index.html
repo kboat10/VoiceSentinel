@@ -240,7 +240,7 @@
             <p class="recording-timer" id="recording-timer">00:00:00</p>
           </div>
 
-          <input type="file" id="upload-audio-input" accept="audio/*" style="display: none;" aria-label="Upload audio file" />
+          <input type="file" id="upload-audio-input" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav" style="display: none;" aria-label="Upload audio file (WAV or MP3 only)" />
           <div class="card upload-card" id="upload-card" role="button" tabindex="0">
             <div class="card-inner upload-card">
               <div class="icon-circle">
@@ -334,6 +334,17 @@
                 </div>
               </div>
               <button type="button" class="settings-tile" id="settings-edit-profile">Edit profile</button>
+              <button type="button" class="settings-tile" id="settings-about-me">About me</button>
+              <div id="about-me-error" class="auth-error" style="display: none;" role="alert"></div>
+              <div id="about-me-panel" class="about-me-panel" style="display: none;">
+                <div class="about-me-loading" id="about-me-loading">Loading...</div>
+                <div class="about-me-content" id="about-me-content">
+                  <div class="about-me-row"><span class="about-me-label">User ID</span><span class="about-me-value" id="about-me-uid">—</span></div>
+                  <div class="about-me-row"><span class="about-me-label">Email</span><span class="about-me-value" id="about-me-email">—</span></div>
+                  <div class="about-me-row"><span class="about-me-label">User Type</span><span class="about-me-value" id="about-me-level">—</span></div>
+                  <div class="about-me-row"><span class="about-me-label">Member Since</span><span class="about-me-value" id="about-me-created">—</span></div>
+                </div>
+              </div>
               <button type="button" class="settings-tile">Help & support</button>
               <div id="settings-delete-error" class="auth-error" style="display: none;" role="alert"></div>
               <button type="button" class="settings-tile settings-tile--danger" id="settings-delete-account">Delete account</button>
@@ -390,6 +401,22 @@
           <p style="color: var(--grey-700); font-size: 15px; margin-bottom: 24px;">
             Select a recording from your history to see its analysis, transcript, and detection results here.
           </p>
+          <!-- Latest prediction result -->
+          <div id="prediction-result" class="prediction-result-card" style="display: none;">
+            <h3 class="prediction-title">Latest Analysis Result</h3>
+            <div class="prediction-rows">
+              <div class="prediction-row"><span class="prediction-label">Sample ID</span><span class="prediction-value" id="pred-sample-id">—</span></div>
+              <div class="prediction-row"><span class="prediction-label">Verdict</span><span class="prediction-value" id="pred-verdict">—</span></div>
+              <div class="prediction-row"><span class="prediction-label">Confidence</span><span class="prediction-value" id="pred-confidence">—</span></div>
+              <div class="prediction-row"><span class="prediction-label">Analysis</span><span class="prediction-value" id="pred-analysis-url">—</span></div>
+              <div class="prediction-row"><span class="prediction-label">File</span><span class="prediction-value" id="pred-filename">—</span></div>
+            </div>
+          </div>
+          <!-- Local sample history -->
+          <div id="local-samples-section" style="display: none;">
+            <h3 style="font-size: 16px; font-weight: 600; margin: 24px 0 12px; color: var(--dark-text);">Your Samples</h3>
+            <div id="local-samples-list" class="history-list"></div>
+          </div>
           <div id="history-error" class="auth-error" style="display: none;" role="alert"></div>
           <div id="history-loading" class="history-loading" style="display: none;">Loading history…</div>
           <div id="history-list" class="history-list" style="display: none;"></div>
