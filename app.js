@@ -16,8 +16,8 @@ const USER_ID_KEY = 'voiceSentinelUserId';
 const USER_EMAIL_KEY = 'voiceSentinelEmail';
 const SAMPLES_STORAGE_KEY = 'voiceSentinelSamples';
 
-const ALLOWED_AUDIO_TYPES = ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3'];
-const ALLOWED_AUDIO_EXTS = ['.wav', '.mp3'];
+const ALLOWED_AUDIO_TYPES = ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/aac'];
+const ALLOWED_AUDIO_EXTS = ['.wav', '.mp3', '.m4a'];
 
 function isAllowedAudioFile(file) {
   if (!file) return false;
@@ -163,6 +163,7 @@ const panels = {
   settings: document.getElementById('panel-settings'),
   changeUserType: document.getElementById('panel-change-user-type'),
   audioBreakdown: document.getElementById('panel-audio-breakdown'),
+  history: document.getElementById('panel-history'),
   download: document.getElementById('panel-download'),
 };
 
@@ -189,6 +190,7 @@ const navToPanelKey = {
   'settings': 'settings',
   'change-user-type': 'changeUserType',
   'audio-breakdown': 'audioBreakdown',
+  'history': 'history',
   'download': 'download',
 };
 
@@ -211,11 +213,7 @@ function navTo(path) {
     leaveApp();
     return;
   }
-  if (path === 'home') showPanel('home');
-  else if (path === 'settings') showPanel('settings');
-  else if (path === 'change-user-type') showPanel('changeUserType');
-  else if (path === 'audio-breakdown') showPanel('audioBreakdown');
-  else if (path === 'download') showPanel('download');
+  showPanel(path);
 }
 
 // --- Sidebar nav ---
@@ -231,6 +229,8 @@ document.getElementById('sidebar-logout')?.addEventListener('click', () => {
 if (getAuthToken()) {
   const storedId = getStoredUserId();
   if (storedId != null) state.userId = storedId;
+  loadRecordings();
+  renderRecordings();
   enterApp();
   (async () => {
     try {
@@ -1580,7 +1580,7 @@ async function submitRecordingFromReview() {
   }
 
   if (blob instanceof File && !isAllowedAudioFile(blob)) {
-    if (reviewErrorEl) { reviewErrorEl.textContent = 'Only WAV and MP3 files are accepted. Please upload a .wav or .mp3 file.'; reviewErrorEl.style.display = 'block'; }
+    if (reviewErrorEl) { reviewErrorEl.textContent = 'Only WAV, MP3, and M4A files are accepted. Please upload a supported file.'; reviewErrorEl.style.display = 'block'; }
     return;
   }
 
@@ -1627,10 +1627,10 @@ async function submitRecordingFromReview() {
       saveSampleFootprint(footprint);
 
       state.recordings.unshift({ name, duration, status: 'completed', verdict, confidence, sampleId });
+      saveRecordings();
       closeReviewModal();
       renderRecordings();
       showPredictionResult(footprint);
-      renderLocalSamples();
       navTo('audio-breakdown');
 
       if (sampleId != null) {
@@ -1651,7 +1651,7 @@ async function submitRecordingFromReview() {
     }
 
     if (res.status === 415) {
-      if (reviewErrorEl) { reviewErrorEl.textContent = 'Unsupported audio format. Only WAV and MP3 files are accepted.'; reviewErrorEl.style.display = 'block'; }
+      if (reviewErrorEl) { reviewErrorEl.textContent = 'Unsupported audio format. Only WAV, MP3, and M4A files are accepted.'; reviewErrorEl.style.display = 'block'; }
     } else if (res.status === 500) {
       if (reviewErrorEl) { reviewErrorEl.textContent = 'Server processing error. Please try again in a moment.'; reviewErrorEl.style.display = 'block'; }
     } else {
@@ -1717,7 +1717,7 @@ uploadAudioInput?.addEventListener('change', () => {
   const file = uploadAudioInput.files?.[0];
   if (!file) return;
   if (!isAllowedAudioFile(file)) {
-    alert('Only WAV and MP3 files are accepted. Please select a .wav or .mp3 file.');
+    alert('Only WAV, MP3, and M4A files are accepted. Please select a supported file.');
     uploadAudioInput.value = '';
     return;
   }
@@ -1726,6 +1726,26 @@ uploadAudioInput?.addEventListener('change', () => {
   openReviewModal(file);
   uploadAudioInput.value = '';
 });
+
+// --- Persist recordings in localStorage per user ---
+const RECORDINGS_STORAGE_KEY = 'voiceSentinelRecordings';
+function saveRecordings() {
+  const uid = state.userId ?? getStoredUserId();
+  if (uid == null) return;
+  try {
+    const data = state.recordings.map(({ name, duration, status, verdict, confidence, sampleId }) =>
+      ({ name, duration, status, verdict, confidence, sampleId }));
+    localStorage.setItem(`${RECORDINGS_STORAGE_KEY}_${uid}`, JSON.stringify(data));
+  } catch (_) {}
+}
+function loadRecordings() {
+  const uid = state.userId ?? getStoredUserId();
+  if (uid == null) return;
+  try {
+    const raw = localStorage.getItem(`${RECORDINGS_STORAGE_KEY}_${uid}`);
+    if (raw) state.recordings = JSON.parse(raw);
+  } catch (_) {}
+}
 
 // --- Home: Recordings list ---
 function renderRecordings() {
@@ -1761,6 +1781,7 @@ function renderRecordings() {
     btn.addEventListener('click', () => {
       const i = parseInt(btn.getAttribute('data-index'), 10);
       state.recordings.splice(i, 1);
+      saveRecordings();
       renderRecordings();
     });
   });
@@ -1794,7 +1815,7 @@ function setupCompareUpload(index) {
     const file = fileInput.files?.[0];
     if (!file) return;
     if (!isAllowedAudioFile(file)) {
-      alert('Only WAV and MP3 files are accepted. Please select a .wav or .mp3 file.');
+      alert('Only WAV, MP3, and M4A files are accepted. Please select a supported file.');
       fileInput.value = '';
       return;
     }
@@ -1941,7 +1962,7 @@ function renderHistoryEntry(item) {
   return el;
 }
 
-document.getElementById('btn-history')?.addEventListener('click', async () => {
+async function loadHistoryFromServer() {
   const listEl = document.getElementById('history-list');
   const errorEl = document.getElementById('history-error');
   const loadingEl = document.getElementById('history-loading');
@@ -1951,7 +1972,6 @@ document.getElementById('btn-history')?.addEventListener('click', async () => {
   if (placeholderCard) placeholderCard.style.display = 'none';
   renderLocalSamples();
   if (loadingEl) { loadingEl.style.display = 'block'; loadingEl.textContent = 'Loading history…'; }
-  navTo('audio-breakdown');
 
   const userId = state.userId ?? getStoredUserId();
   if (userId == null) {
@@ -2003,6 +2023,15 @@ document.getElementById('btn-history')?.addEventListener('click', async () => {
     }
     if (placeholderCard) placeholderCard.style.display = 'block';
   }
+}
+
+document.getElementById('btn-history')?.addEventListener('click', () => {
+  navTo('history');
+  loadHistoryFromServer();
+});
+
+document.getElementById('btn-load-history')?.addEventListener('click', () => {
+  loadHistoryFromServer();
 });
 
 // --- Clear All History ---

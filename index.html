@@ -188,6 +188,10 @@
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
           <span>Audio breakdown</span>
         </button>
+        <button type="button" class="nav-item" data-nav="history">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>History</span>
+        </button>
         <button type="button" class="nav-item" data-nav="download">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           <span>Download mobile app</span>
@@ -244,7 +248,7 @@
             <p class="recording-timer" id="recording-timer">00:00:00</p>
           </div>
 
-          <input type="file" id="upload-audio-input" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav" style="display: none;" aria-label="Upload audio file (WAV or MP3 only)" />
+          <input type="file" id="upload-audio-input" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/x-wav,audio/mp4,audio/x-m4a" style="display: none;" aria-label="Upload audio file" />
           <div class="card upload-card" id="upload-card" role="button" tabindex="0">
             <div class="card-inner upload-card">
               <div class="icon-circle">
@@ -358,22 +362,6 @@
             <div class="card-inner">
               <div class="header">
                 <div class="icon-circle">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-                </div>
-                <div>
-                  <h3 class="title">System</h3>
-                  <p class="subtitle">System statistics</p>
-                </div>
-              </div>
-              <button type="button" class="settings-tile" id="settings-view-stats">View system stats</button>
-              <div id="settings-stats-error" class="auth-error" style="display: none;" role="alert"></div>
-              <div id="settings-stats-output" class="settings-stats-output" style="display: none;"></div>
-            </div>
-          </div>
-          <div class="card settings-section">
-            <div class="card-inner">
-              <div class="header">
-                <div class="icon-circle">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </div>
                 <div>
@@ -436,7 +424,7 @@
           <div class="compare-uploads">
             <!-- Sample 1 -->
             <div class="compare-upload-card" id="compare-card-1">
-              <input type="file" id="compare-file-1" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav" style="display: none;" />
+              <input type="file" id="compare-file-1" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/x-wav,audio/mp4,audio/x-m4a" style="display: none;" />
               <div class="compare-upload-area" id="compare-area-1" role="button" tabindex="0">
                 <div class="icon-circle">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -447,7 +435,7 @@
             </div>
             <!-- Sample 2 -->
             <div class="compare-upload-card" id="compare-card-2">
-              <input type="file" id="compare-file-2" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav" style="display: none;" />
+              <input type="file" id="compare-file-2" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/x-wav,audio/mp4,audio/x-m4a" style="display: none;" />
               <div class="compare-upload-area" id="compare-area-2" role="button" tabindex="0">
                 <div class="icon-circle">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -488,9 +476,6 @@
         <div class="page-content form-page">
           <h1 class="page-title">Audio breakdown</h1>
           <p class="page-subtitle">Detailed breakdown of your uploaded audio.</p>
-          <p style="color: var(--grey-700); font-size: 15px; margin-bottom: 24px;">
-            Select a recording from your history to see its analysis, transcript, and detection results here.
-          </p>
           <!-- Latest prediction result -->
           <div id="prediction-result" class="prediction-result-card" style="display: none;">
             <h3 class="prediction-title">Latest Analysis Result</h3>
@@ -535,6 +520,15 @@
             <div id="lookup-loading" class="history-loading" style="display: none;">Fetching analysis…</div>
             <div id="lookup-result" style="display: none;"></div>
           </div>
+        </div>
+      </section>
+
+      <!-- History panel -->
+      <section id="panel-history" class="panel">
+        <div class="page-content form-page">
+          <h1 class="page-title">History</h1>
+          <p class="page-subtitle">Your analysis history and saved samples.</p>
+          <button type="button" class="btn-primary" id="btn-load-history" style="margin-bottom: 16px;">Load history from server</button>
           <!-- Local sample history -->
           <div id="local-samples-section" style="display: none;">
             <h3 style="font-size: 16px; font-weight: 600; margin: 24px 0 12px; color: var(--dark-text);">Your Samples</h3>
@@ -548,10 +542,10 @@
           <div class="card" id="history-placeholder-card">
             <div class="card-inner placeholder-card">
               <div class="icon-circle">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               </div>
-              <h3>No recording selected</h3>
-              <p>Go to Home and click <strong>View History</strong> to load your analysis history from the server.</p>
+              <h3>No history yet</h3>
+              <p>Click <strong>Load history from server</strong> above, or record/upload audio to see your analysis entries here.</p>
             </div>
           </div>
         </div>
