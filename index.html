@@ -172,6 +172,10 @@
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           <span>Home</span>
         </button>
+        <button type="button" class="nav-item" data-nav="compare">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 3l7 7"/><path d="M16 21h5v-5"/><path d="M8 21H3v-5"/><path d="M21 21l-7-7"/><path d="M3 21l7-7"/></svg>
+          <span>Comparative Analysis</span>
+        </button>
         <button type="button" class="nav-item" data-nav="settings">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           <span>Settings</span>
@@ -366,6 +370,36 @@
               <div id="settings-stats-output" class="settings-stats-output" style="display: none;"></div>
             </div>
           </div>
+          <div class="card settings-section">
+            <div class="card-inner">
+              <div class="header">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </div>
+                <div>
+                  <h3 class="title">Export Data</h3>
+                  <p class="subtitle">Download your analysis results</p>
+                </div>
+              </div>
+              <button type="button" class="settings-tile" id="settings-export-data">Export data</button>
+              <div id="export-panel" style="display: none;">
+                <p style="color: var(--grey-700); font-size: 13px; margin: 0 0 12px;">Choose an export format:</p>
+                <div class="export-buttons">
+                  <button type="button" class="btn-primary export-btn" id="export-json-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Export as JSON
+                  </button>
+                  <button type="button" class="btn-primary export-btn" id="export-csv-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    Export as CSV
+                  </button>
+                </div>
+                <div id="export-error" class="auth-error" style="display: none;" role="alert"></div>
+                <div id="export-loading" class="history-loading" style="display: none;">Exporting…</div>
+                <div id="export-success" class="export-success" style="display: none;"></div>
+              </div>
+            </div>
+          </div>
           <p class="settings-version">Voice Sentinel v1.0</p>
         </div>
       </section>
@@ -393,6 +427,62 @@
         </div>
       </section>
 
+      <!-- Comparative Analysis panel -->
+      <section id="panel-compare" class="panel">
+        <div class="page-content form-page">
+          <h1 class="page-title">Comparative Analysis</h1>
+          <p class="page-subtitle">Upload two audio samples and compare their analysis results side by side.</p>
+
+          <div class="compare-uploads">
+            <!-- Sample 1 -->
+            <div class="compare-upload-card" id="compare-card-1">
+              <input type="file" id="compare-file-1" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav" style="display: none;" />
+              <div class="compare-upload-area" id="compare-area-1" role="button" tabindex="0">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <h3>Sample 1</h3>
+                <p class="compare-file-name" id="compare-name-1">Click to upload WAV or MP3</p>
+              </div>
+            </div>
+            <!-- Sample 2 -->
+            <div class="compare-upload-card" id="compare-card-2">
+              <input type="file" id="compare-file-2" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav" style="display: none;" />
+              <div class="compare-upload-area" id="compare-area-2" role="button" tabindex="0">
+                <div class="icon-circle">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <h3>Sample 2</h3>
+                <p class="compare-file-name" id="compare-name-2">Click to upload WAV or MP3</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="compare-actions">
+            <div id="compare-error" class="auth-error" style="display: none;" role="alert"></div>
+            <button type="button" class="btn-primary compare-submit-btn" id="compare-submit-btn" disabled>
+              Compare Samples
+            </button>
+            <div id="compare-loading" class="history-loading" style="display: none;">Uploading and analyzing…</div>
+          </div>
+
+          <div id="compare-result" class="compare-result-section" style="display: none;">
+            <h3 class="prediction-title">Comparison Result</h3>
+            <div class="compare-agreement" id="compare-agreement"></div>
+            <div class="compare-side-by-side">
+              <div class="compare-sample-result">
+                <h4>Sample 1</h4>
+                <div id="compare-result-1"></div>
+              </div>
+              <div class="compare-sample-result">
+                <h4>Sample 2</h4>
+                <div id="compare-result-2"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Audio breakdown panel -->
       <section id="panel-audio-breakdown" class="panel">
         <div class="page-content form-page">
@@ -412,6 +502,39 @@
               <div class="prediction-row"><span class="prediction-label">File</span><span class="prediction-value" id="pred-filename">—</span></div>
             </div>
           </div>
+          <!-- Detailed analysis (auto-fetched after predict) -->
+          <div id="analysis-detail" class="analysis-detail-card" style="display: none;">
+            <h3 class="prediction-title">Detailed Analysis</h3>
+            <div id="analysis-detail-loading" class="history-loading" style="display: none;">Fetching analysis…</div>
+            <div id="analysis-detail-error" class="auth-error" style="display: none;" role="alert"></div>
+            <div id="analysis-detail-content"></div>
+          </div>
+          <!-- Authenticated: pick from your samples -->
+          <div class="sample-lookup-card" id="sample-picker-section">
+            <h3 class="prediction-title">Your Sample Analysis</h3>
+            <p style="color: var(--grey-700); font-size: 13px; margin: 0 0 12px;">Select one of your samples to view its full forensic details.</p>
+            <div class="sample-lookup-row">
+              <select id="sample-picker-select" class="auth-input">
+                <option value="" disabled selected>Select a sample…</option>
+              </select>
+              <button type="button" class="btn-primary" id="sample-picker-btn">View Analysis</button>
+            </div>
+            <div id="sample-picker-error" class="auth-error" style="display: none;" role="alert"></div>
+            <div id="sample-picker-loading" class="history-loading" style="display: none;">Fetching analysis…</div>
+            <div id="sample-picker-result" style="display: none;"></div>
+          </div>
+          <!-- Manual sample lookup (no account needed) -->
+          <div class="sample-lookup-card">
+            <h3 class="prediction-title">Look Up Analysis by Sample ID</h3>
+            <p style="color: var(--grey-700); font-size: 13px; margin: 0 0 12px;">Enter any sample ID to retrieve its analysis (no account required).</p>
+            <div class="sample-lookup-row">
+              <input type="number" id="lookup-sample-id" class="auth-input" placeholder="Enter sample ID" min="1" />
+              <button type="button" class="btn-primary" id="lookup-sample-btn">Get Analysis</button>
+            </div>
+            <div id="lookup-error" class="auth-error" style="display: none;" role="alert"></div>
+            <div id="lookup-loading" class="history-loading" style="display: none;">Fetching analysis…</div>
+            <div id="lookup-result" style="display: none;"></div>
+          </div>
           <!-- Local sample history -->
           <div id="local-samples-section" style="display: none;">
             <h3 style="font-size: 16px; font-weight: 600; margin: 24px 0 12px; color: var(--dark-text);">Your Samples</h3>
@@ -420,6 +543,8 @@
           <div id="history-error" class="auth-error" style="display: none;" role="alert"></div>
           <div id="history-loading" class="history-loading" style="display: none;">Loading history…</div>
           <div id="history-list" class="history-list" style="display: none;"></div>
+          <div id="clear-history-error" class="auth-error" style="display: none;" role="alert"></div>
+          <button type="button" class="settings-tile settings-tile--danger" id="clear-history-btn" style="display: none; margin-top: 12px;">Clear all history</button>
           <div class="card" id="history-placeholder-card">
             <div class="card-inner placeholder-card">
               <div class="icon-circle">

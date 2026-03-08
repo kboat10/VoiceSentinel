@@ -1248,6 +1248,183 @@ body {
   max-height: 320px;
   overflow: auto;
 }
+/* Export Data section in Settings */
+.export-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: center;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+.export-success {
+  margin-top: 10px;
+  padding: 12px 16px;
+  background: rgba(22, 163, 74, 0.08);
+  border: 1px solid rgba(22, 163, 74, 0.25);
+  border-radius: 10px;
+  color: #16a34a;
+  font-size: 14px;
+  font-weight: 600;
+}
+@media (max-width: 480px) {
+  .export-buttons { flex-direction: column; }
+}
+
+/* Comparative Analysis page */
+.compare-uploads {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+@media (max-width: 600px) {
+  .compare-uploads { grid-template-columns: 1fr; }
+}
+.compare-upload-card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.compare-upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 20px;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: center;
+}
+.compare-upload-area:hover {
+  background: rgba(50, 181, 232, 0.06);
+}
+.compare-upload-area h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark-text);
+}
+.compare-file-name {
+  font-size: 13px;
+  color: var(--grey-600);
+  margin: 0;
+  word-break: break-all;
+}
+.compare-file-name.has-file {
+  color: var(--primary-blue);
+  font-weight: 600;
+}
+.compare-actions {
+  margin-bottom: 20px;
+}
+.compare-submit-btn {
+  width: 100%;
+  margin-top: 8px;
+}
+.compare-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.compare-result-section {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+}
+.compare-agreement {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  text-align: center;
+}
+.compare-agreement--agree {
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
+}
+.compare-agreement--disagree {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+}
+.compare-side-by-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 600px) {
+  .compare-side-by-side { grid-template-columns: 1fr; }
+}
+.compare-sample-result {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.compare-sample-result h4 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dark-text);
+}
+
+/* Analysis detail & sample lookup on Audio Breakdown page */
+.analysis-detail-card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+.analysis-detail-content-body {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--dark-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.analysis-detail-json {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dark-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow: auto;
+  margin: 0;
+}
+.sample-lookup-card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+.sample-lookup-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.sample-lookup-row .auth-input {
+  flex: 1;
+  margin: 0;
+}
+.sample-lookup-row .btn-primary {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* Prediction result card on Audio Breakdown page */
 .prediction-result-card {
   background: var(--background);
@@ -1431,6 +1608,32 @@ body {
 }
 .history-entry .card-inner {
   padding: 16px 20px;
+}
+.history-entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.history-entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.history-entry-verdict {
+  font-size: 16px;
+  font-weight: 700;
+}
+.history-entry-conf {
+  font-size: 14px;
+  color: var(--grey-700);
+}
+.history-entry-details {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--grey-600);
 }
 .history-entry-json,
 .history-entry-text {

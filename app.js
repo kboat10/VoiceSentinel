@@ -159,6 +159,7 @@ const welcomeScreen = document.getElementById('screen-welcome');
 const appShell = document.getElementById('app-shell');
 const panels = {
   home: document.getElementById('panel-home'),
+  compare: document.getElementById('panel-compare'),
   settings: document.getElementById('panel-settings'),
   changeUserType: document.getElementById('panel-change-user-type'),
   audioBreakdown: document.getElementById('panel-audio-breakdown'),
@@ -184,6 +185,7 @@ function leaveApp() {
 // Map sidebar data-nav to panel keys
 const navToPanelKey = {
   'home': 'home',
+  'compare': 'compare',
   'settings': 'settings',
   'change-user-type': 'changeUserType',
   'audio-breakdown': 'audioBreakdown',
@@ -892,6 +894,86 @@ document.getElementById('settings-view-stats')?.addEventListener('click', async 
   }
 });
 
+// --- Settings: Export Data ---
+document.getElementById('settings-export-data')?.addEventListener('click', () => {
+  const panel = document.getElementById('export-panel');
+  if (panel) panel.style.display = panel.style.display === 'none' ? '' : 'none';
+});
+
+async function handleExport(format) {
+  const errorEl = document.getElementById('export-error');
+  const loadingEl = document.getElementById('export-loading');
+  const successEl = document.getElementById('export-success');
+  const jsonBtn = document.getElementById('export-json-btn');
+  const csvBtn = document.getElementById('export-csv-btn');
+
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (successEl) { successEl.style.display = 'none'; successEl.textContent = ''; }
+  if (loadingEl) loadingEl.style.display = '';
+  if (jsonBtn) jsonBtn.disabled = true;
+  if (csvBtn) csvBtn.disabled = true;
+
+  const userId = state.userId ?? getStoredUserId();
+  if (userId == null) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl) { errorEl.textContent = 'Could not determine your account. Please log out and log in again.'; errorEl.style.display = ''; }
+    if (jsonBtn) jsonBtn.disabled = false;
+    if (csvBtn) csvBtn.disabled = false;
+    return;
+  }
+
+  const endpoint = format === 'csv' ? 'export/csv' : 'export/results';
+
+  try {
+    const res = await apiFetch(`${endpoint}?user_id=${encodeURIComponent(userId)}`);
+    const text = await res.text();
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    if (!res.ok) {
+      if (errorEl) { errorEl.textContent = parseApiError(res, text); errorEl.style.display = ''; }
+      return;
+    }
+
+    if (format === 'csv') {
+      const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `voicesentinel_export_${userId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if (successEl) { successEl.textContent = 'CSV file downloaded successfully.'; successEl.style.display = ''; }
+    } else {
+      let data = text;
+      try {
+        const parsed = JSON.parse(text);
+        data = JSON.stringify(parsed, null, 2);
+      } catch (_) {}
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `voicesentinel_export_${userId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if (successEl) { successEl.textContent = 'JSON file downloaded successfully.'; successEl.style.display = ''; }
+    }
+  } catch (err) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl) { errorEl.textContent = formatNetworkError(err); errorEl.style.display = ''; }
+  } finally {
+    if (jsonBtn) jsonBtn.disabled = false;
+    if (csvBtn) csvBtn.disabled = false;
+  }
+}
+
+document.getElementById('export-json-btn')?.addEventListener('click', () => handleExport('json'));
+document.getElementById('export-csv-btn')?.addEventListener('click', () => handleExport('csv'));
+
 // --- Home: Record status & timer ---
 function formatDuration(seconds) {
   const m = Math.floor(seconds / 60);
@@ -1337,6 +1419,104 @@ function toggleReviewPlayback() {
   }
 }
 
+function renderAnalysisContent(container, data) {
+  if (!container) return;
+  if (typeof data === 'string') {
+    container.innerHTML = `<div class="analysis-detail-content-body">${escapeHtml(data)}</div>`;
+  } else if (data && typeof data === 'object') {
+    const rows = Object.entries(data).map(([k, v]) => {
+      const label = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      let val = v;
+      if (typeof v === 'object' && v !== null) val = JSON.stringify(v, null, 2);
+      return `<div class="prediction-row"><span class="prediction-label">${escapeHtml(label)}</span><span class="prediction-value">${escapeHtml(String(val ?? '—'))}</span></div>`;
+    }).join('');
+    container.innerHTML = `<div class="prediction-rows">${rows}</div>`;
+  } else {
+    container.innerHTML = '<p style="color:var(--grey-600);">No analysis data available.</p>';
+  }
+}
+
+async function fetchAnalysis(sampleId, opts) {
+  const { loadingEl, errorEl, contentEl, cardEl } = opts;
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (contentEl) contentEl.innerHTML = '';
+  if (loadingEl) loadingEl.style.display = '';
+  if (cardEl) cardEl.style.display = '';
+
+  try {
+    const res = await apiFetch(`forensics/analysis/${encodeURIComponent(sampleId)}`);
+    const text = await res.text();
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (!res.ok) {
+      if (errorEl) { errorEl.textContent = parseApiError(res, text); errorEl.style.display = ''; }
+      return null;
+    }
+    let data = null;
+    try { data = text ? JSON.parse(text) : text; } catch { data = text; }
+    renderAnalysisContent(contentEl, data);
+    return data;
+  } catch (err) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl) { errorEl.textContent = formatNetworkError(err); errorEl.style.display = ''; }
+    return null;
+  }
+}
+
+async function fetchSampleAnalysis(sampleId, userId, opts) {
+  const { loadingEl, errorEl, contentEl, cardEl } = opts;
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (contentEl) contentEl.innerHTML = '';
+  if (loadingEl) loadingEl.style.display = '';
+  if (cardEl) cardEl.style.display = '';
+
+  try {
+    const res = await apiFetch(`forensics/sample/${encodeURIComponent(sampleId)}?user_id=${encodeURIComponent(userId)}`);
+    const text = await res.text();
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (!res.ok) {
+      if (errorEl) { errorEl.textContent = parseApiError(res, text); errorEl.style.display = ''; }
+      return null;
+    }
+    let data = null;
+    try { data = text ? JSON.parse(text) : text; } catch { data = text; }
+    renderAnalysisContent(contentEl, data);
+    return data;
+  } catch (err) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl) { errorEl.textContent = formatNetworkError(err); errorEl.style.display = ''; }
+    return null;
+  }
+}
+
+function populateSamplePicker(historyData) {
+  const select = document.getElementById('sample-picker-select');
+  if (!select) return;
+  select.innerHTML = '<option value="" disabled selected>Select a sample…</option>';
+  let items = [];
+  if (Array.isArray(historyData)) {
+    items = historyData.filter((h) => h && h.sample_id != null);
+  }
+  const localSamples = getSavedSamples();
+  localSamples.forEach((s) => {
+    if (s.sample_id != null && !items.some((h) => String(h.sample_id) === String(s.sample_id))) {
+      items.push(s);
+    }
+  });
+  if (items.length === 0) {
+    select.innerHTML += '<option value="" disabled>No samples found</option>';
+    return;
+  }
+  items.forEach((item) => {
+    const opt = document.createElement('option');
+    opt.value = item.sample_id;
+    const verdict = item.verdict ?? '';
+    const date = item.created_at ?? item.date;
+    const dateStr = date ? new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+    opt.textContent = `#${item.sample_id}` + (verdict ? ` — ${verdict}` : '') + (dateStr ? ` (${dateStr})` : '');
+    select.appendChild(opt);
+  });
+}
+
 function showPredictionResult(data) {
   const card = document.getElementById('prediction-result');
   if (!card) return;
@@ -1452,6 +1632,21 @@ async function submitRecordingFromReview() {
       showPredictionResult(footprint);
       renderLocalSamples();
       navTo('audio-breakdown');
+
+      if (sampleId != null) {
+        const analysisOpts = {
+          loadingEl: document.getElementById('analysis-detail-loading'),
+          errorEl: document.getElementById('analysis-detail-error'),
+          contentEl: document.getElementById('analysis-detail-content'),
+          cardEl: document.getElementById('analysis-detail'),
+        };
+        if (userId != null) {
+          fetchSampleAnalysis(sampleId, userId, analysisOpts);
+        } else {
+          fetchAnalysis(sampleId, analysisOpts);
+        }
+        populateSamplePicker([{ sample_id: sampleId, verdict, date: new Date().toISOString() }]);
+      }
       return;
     }
 
@@ -1577,7 +1772,175 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
-// --- View History: fetch GET /forensics/history and show in Audio breakdown panel ---
+// --- Comparative Analysis ---
+const compareState = { file1: null, file2: null, sampleId1: null, sampleId2: null };
+
+function updateCompareButton() {
+  const btn = document.getElementById('compare-submit-btn');
+  if (btn) btn.disabled = !(compareState.file1 && compareState.file2);
+}
+
+function setupCompareUpload(index) {
+  const fileInput = document.getElementById(`compare-file-${index}`);
+  const area = document.getElementById(`compare-area-${index}`);
+  const nameEl = document.getElementById(`compare-name-${index}`);
+
+  area?.addEventListener('click', () => fileInput?.click());
+  area?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput?.click(); }
+  });
+
+  fileInput?.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    if (!isAllowedAudioFile(file)) {
+      alert('Only WAV and MP3 files are accepted. Please select a .wav or .mp3 file.');
+      fileInput.value = '';
+      return;
+    }
+    compareState[`file${index}`] = file;
+    if (nameEl) { nameEl.textContent = file.name; nameEl.classList.add('has-file'); }
+    updateCompareButton();
+    fileInput.value = '';
+  });
+}
+setupCompareUpload(1);
+setupCompareUpload(2);
+
+document.getElementById('compare-submit-btn')?.addEventListener('click', async () => {
+  const errorEl = document.getElementById('compare-error');
+  const loadingEl = document.getElementById('compare-loading');
+  const resultEl = document.getElementById('compare-result');
+  const btn = document.getElementById('compare-submit-btn');
+
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (resultEl) resultEl.style.display = 'none';
+
+  const userId = state.userId ?? getStoredUserId();
+  if (userId == null) {
+    if (errorEl) { errorEl.textContent = 'Could not determine your account. Please log out and log in again.'; errorEl.style.display = ''; }
+    return;
+  }
+  if (!compareState.file1 || !compareState.file2) {
+    if (errorEl) { errorEl.textContent = 'Please upload both audio samples.'; errorEl.style.display = ''; }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
+  if (loadingEl) loadingEl.style.display = '';
+
+  try {
+    const uploadSample = async (file) => {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      fd.append('user_id', String(userId));
+      const res = await apiFetch('forensics/predict', { method: 'POST', body: fd });
+      const text = await res.text();
+      if (!res.ok) throw new Error(parseApiError(res, text));
+      let data = null;
+      try { data = JSON.parse(text); } catch { data = text; }
+      return data?.sample_id ?? null;
+    };
+
+    if (loadingEl) loadingEl.textContent = 'Uploading Sample 1…';
+    const sid1 = await uploadSample(compareState.file1);
+    if (sid1 == null) throw new Error('Sample 1 did not return a sample ID.');
+
+    if (loadingEl) loadingEl.textContent = 'Uploading Sample 2…';
+    const sid2 = await uploadSample(compareState.file2);
+    if (sid2 == null) throw new Error('Sample 2 did not return a sample ID.');
+
+    compareState.sampleId1 = sid1;
+    compareState.sampleId2 = sid2;
+
+    if (loadingEl) loadingEl.textContent = 'Comparing…';
+    const qp = new URLSearchParams({ sample_id_1: String(sid1), sample_id_2: String(sid2), user_id: String(userId) });
+    const res = await apiFetch(`forensics/compare?${qp.toString()}`);
+    const text = await res.text();
+
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        if (errorEl) { errorEl.textContent = 'One or both samples were not found or do not belong to your account.'; errorEl.style.display = ''; }
+      } else {
+        if (errorEl) { errorEl.textContent = parseApiError(res, text); errorEl.style.display = ''; }
+      }
+      return;
+    }
+
+    let data = null;
+    try { data = JSON.parse(text); } catch { data = text; }
+
+    const agreementEl = document.getElementById('compare-agreement');
+    if (agreementEl && data) {
+      const agree = data.verdict_agreement;
+      if (agree === true) {
+        agreementEl.textContent = 'Verdicts Agree';
+        agreementEl.className = 'compare-agreement compare-agreement--agree';
+      } else if (agree === false) {
+        agreementEl.textContent = 'Verdicts Disagree';
+        agreementEl.className = 'compare-agreement compare-agreement--disagree';
+      } else {
+        agreementEl.textContent = '';
+        agreementEl.className = 'compare-agreement';
+      }
+    }
+
+    const comparison = data?.comparison;
+    const r1El = document.getElementById('compare-result-1');
+    const r2El = document.getElementById('compare-result-2');
+    if (Array.isArray(comparison) && comparison.length >= 2) {
+      renderAnalysisContent(r1El, comparison[0]);
+      renderAnalysisContent(r2El, comparison[1]);
+    } else if (comparison) {
+      renderAnalysisContent(r1El, comparison);
+      if (r2El) r2El.innerHTML = '';
+    } else {
+      renderAnalysisContent(r1El, data);
+      if (r2El) r2El.innerHTML = '';
+    }
+
+    if (resultEl) resultEl.style.display = '';
+  } catch (err) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl) { errorEl.textContent = err.message || formatNetworkError(err); errorEl.style.display = ''; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Compare Samples'; }
+    updateCompareButton();
+  }
+});
+
+// --- View History: fetch GET /forensics/history?user_id= and show in Audio breakdown panel ---
+function renderHistoryEntry(item) {
+  const el = document.createElement('div');
+  el.className = 'card history-entry';
+  if (typeof item !== 'object' || item === null) {
+    el.innerHTML = `<div class="card-inner"><p class="history-entry-text">${escapeHtml(String(item))}</p></div>`;
+    return el;
+  }
+  const verdict = item.verdict ?? '—';
+  const verdictClass = verdict === 'Real' ? 'prediction-verdict--real' : verdict === 'Synthetic' ? 'prediction-verdict--synthetic' : '';
+  const conf = item.confidence_score ?? item.confidence;
+  const confStr = conf != null ? `${(conf * 100).toFixed(1)}%` : '—';
+  const sampleId = item.sample_id ?? '—';
+  const date = item.created_at ?? item.date;
+  const dateStr = date ? new Date(date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
+
+  el.innerHTML =
+    `<div class="card-inner history-entry-card">` +
+      `<div class="history-entry-header">` +
+        `<span class="history-entry-verdict ${verdictClass}">${escapeHtml(String(verdict))}</span>` +
+        `<span class="history-entry-conf">Confidence: ${escapeHtml(confStr)}</span>` +
+      `</div>` +
+      `<div class="history-entry-details">` +
+        `<span>Sample ID: ${escapeHtml(String(sampleId))}</span>` +
+        (dateStr ? `<span>${escapeHtml(dateStr)}</span>` : '') +
+      `</div>` +
+    `</div>`;
+  return el;
+}
+
 document.getElementById('btn-history')?.addEventListener('click', async () => {
   const listEl = document.getElementById('history-list');
   const errorEl = document.getElementById('history-error');
@@ -1589,8 +1952,17 @@ document.getElementById('btn-history')?.addEventListener('click', async () => {
   renderLocalSamples();
   if (loadingEl) { loadingEl.style.display = 'block'; loadingEl.textContent = 'Loading history…'; }
   navTo('audio-breakdown');
+
+  const userId = state.userId ?? getStoredUserId();
+  if (userId == null) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl) { errorEl.textContent = 'Could not determine your account. Please log out and log in again.'; errorEl.style.display = 'block'; }
+    if (placeholderCard) placeholderCard.style.display = 'block';
+    return;
+  }
+
   try {
-    const res = await apiFetch('forensics/history');
+    const res = await apiFetch(`forensics/history?user_id=${encodeURIComponent(userId)}`);
     const text = await res.text();
     if (loadingEl) loadingEl.style.display = 'none';
     if (!res.ok) {
@@ -1603,29 +1975,26 @@ document.getElementById('btn-history')?.addEventListener('click', async () => {
     }
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    const clearBtn = document.getElementById('clear-history-btn');
+    let hasEntries = false;
     if (listEl) {
       listEl.innerHTML = '';
       if (Array.isArray(data) && data.length > 0) {
-        data.forEach((item, i) => {
-          const entry = document.createElement('div');
-          entry.className = 'card history-entry';
-          if (typeof item === 'object' && item !== null) {
-            entry.innerHTML = `<div class="card-inner"><pre class="history-entry-json">${escapeHtml(JSON.stringify(item, null, 2))}</pre></div>`;
-          } else {
-            entry.innerHTML = `<div class="card-inner"><p class="history-entry-text">${escapeHtml(String(item))}</p></div>`;
-          }
-          listEl.appendChild(entry);
-        });
+        data.forEach((item) => listEl.appendChild(renderHistoryEntry(item)));
+        hasEntries = true;
       } else if (Array.isArray(data)) {
         listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>No history yet. Record or upload audio and submit to see entries here.</p></div></div>';
       } else if (data !== null && data !== '') {
-        listEl.innerHTML = `<div class="card"><div class="card-inner"><pre class="history-entry-json">${escapeHtml(typeof data === 'object' ? JSON.stringify(data, null, 2) : String(data))}</pre></div></div>`;
+        listEl.appendChild(renderHistoryEntry(data));
+        hasEntries = true;
       } else {
         listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>No history yet. Record or upload audio and submit to see entries here.</p></div></div>';
       }
       listEl.style.display = 'block';
     }
+    if (clearBtn) clearBtn.style.display = hasEntries ? '' : 'none';
     if (placeholderCard) placeholderCard.style.display = 'none';
+    populateSamplePicker(Array.isArray(data) ? data : []);
   } catch (err) {
     if (loadingEl) loadingEl.style.display = 'none';
     if (errorEl) {
@@ -1634,4 +2003,105 @@ document.getElementById('btn-history')?.addEventListener('click', async () => {
     }
     if (placeholderCard) placeholderCard.style.display = 'block';
   }
+});
+
+// --- Clear All History ---
+document.getElementById('clear-history-btn')?.addEventListener('click', async () => {
+  if (!confirm('Permanently delete all your analysis history? This cannot be undone.')) return;
+  const btn = document.getElementById('clear-history-btn');
+  const errorEl = document.getElementById('clear-history-error');
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (btn) btn.disabled = true;
+
+  const userId = state.userId ?? getStoredUserId();
+  if (userId == null) {
+    if (errorEl) { errorEl.textContent = 'Could not determine your account. Please log out and log in again.'; errorEl.style.display = 'block'; }
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  try {
+    const res = await apiFetch('forensics/history/clear', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ user_id: String(userId) }).toString(),
+    });
+    const text = await res.text();
+    if (res.ok) {
+      const listEl = document.getElementById('history-list');
+      if (listEl) {
+        listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>History cleared. Record or upload audio to see entries here.</p></div></div>';
+        listEl.style.display = 'block';
+      }
+      if (btn) btn.style.display = 'none';
+    } else {
+      if (errorEl) { errorEl.textContent = parseApiError(res, text); errorEl.style.display = 'block'; }
+    }
+  } catch (err) {
+    if (errorEl) { errorEl.textContent = formatNetworkError(err); errorEl.style.display = 'block'; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+// --- Sample Picker (authenticated users) ---
+document.getElementById('sample-picker-btn')?.addEventListener('click', async () => {
+  const select = document.getElementById('sample-picker-select');
+  const errorEl = document.getElementById('sample-picker-error');
+  const loadingEl = document.getElementById('sample-picker-loading');
+  const resultEl = document.getElementById('sample-picker-result');
+  const btn = document.getElementById('sample-picker-btn');
+
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (resultEl) { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }
+
+  const sampleId = select?.value;
+  if (!sampleId) {
+    if (errorEl) { errorEl.textContent = 'Please select a sample.'; errorEl.style.display = ''; }
+    return;
+  }
+
+  const userId = state.userId ?? getStoredUserId();
+  if (userId == null) {
+    if (errorEl) { errorEl.textContent = 'Could not determine your account. Please log out and log in again.'; errorEl.style.display = ''; }
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  const data = await fetchSampleAnalysis(sampleId, userId, {
+    loadingEl,
+    errorEl,
+    contentEl: resultEl,
+    cardEl: null,
+  });
+  if (resultEl && data != null) resultEl.style.display = '';
+  if (btn) btn.disabled = false;
+});
+
+// --- Manual Sample Lookup (no account needed) ---
+document.getElementById('lookup-sample-btn')?.addEventListener('click', async () => {
+  const input = document.getElementById('lookup-sample-id');
+  const errorEl = document.getElementById('lookup-error');
+  const loadingEl = document.getElementById('lookup-loading');
+  const resultEl = document.getElementById('lookup-result');
+  const btn = document.getElementById('lookup-sample-btn');
+
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (resultEl) { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }
+
+  const sampleId = input?.value?.trim();
+  if (!sampleId) {
+    if (errorEl) { errorEl.textContent = 'Please enter a sample ID.'; errorEl.style.display = ''; }
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  const data = await fetchAnalysis(sampleId, {
+    loadingEl,
+    errorEl,
+    contentEl: resultEl,
+    cardEl: null,
+  });
+  if (resultEl && data != null) resultEl.style.display = '';
+  if (btn) btn.disabled = false;
 });
