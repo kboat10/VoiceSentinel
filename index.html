@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Voice Sentinel</title>
   <link rel="icon" href="assets/images/ssv.jpg" type="image/jpeg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -474,47 +477,60 @@
       <!-- Audio breakdown panel -->
       <section id="panel-audio-breakdown" class="panel">
         <div class="page-content form-page">
-          <h1 class="page-title">Audio breakdown</h1>
-          <p class="page-subtitle">Detailed breakdown of your uploaded audio.</p>
-          <!-- Latest prediction result -->
-          <div id="prediction-result" class="prediction-result-card" style="display: none;">
-            <h3 class="prediction-title">Latest Analysis Result</h3>
-            <div class="prediction-rows">
-              <div class="prediction-row"><span class="prediction-label">Sample ID</span><span class="prediction-value" id="pred-sample-id">—</span></div>
-              <div class="prediction-row"><span class="prediction-label">Verdict</span><span class="prediction-value" id="pred-verdict">—</span></div>
-              <div class="prediction-row"><span class="prediction-label">Confidence</span><span class="prediction-value" id="pred-confidence">—</span></div>
-              <div class="prediction-row"><span class="prediction-label">Analysis</span><span class="prediction-value" id="pred-analysis-url">—</span></div>
-              <div class="prediction-row"><span class="prediction-label">File</span><span class="prediction-value" id="pred-filename">—</span></div>
+          <h1 class="page-title">Audio Breakdown</h1>
+          <p class="page-subtitle">See the verdict and explore the forensic details of your audio.</p>
+
+          <!-- Verdict snapshot card — always visible after analysis -->
+          <div id="prediction-result" class="verdict-snapshot" style="display: none;">
+            <div class="verdict-snapshot-main">
+              <div class="verdict-icon" id="verdict-icon"></div>
+              <div class="verdict-info">
+                <span class="verdict-label" id="pred-verdict">—</span>
+                <span class="verdict-conf" id="pred-confidence">—</span>
+              </div>
+            </div>
+            <div class="verdict-meta">
+              <span class="verdict-meta-item"><strong>Sample</strong> #<span id="pred-sample-id">—</span></span>
+              <span class="verdict-meta-item" id="pred-filename">—</span>
+              <span class="verdict-meta-item" id="pred-analysis-url"></span>
             </div>
           </div>
-          <!-- Detailed analysis (auto-fetched after predict) -->
-          <div id="analysis-detail" class="analysis-detail-card" style="display: none;">
-            <h3 class="prediction-title">Detailed Analysis</h3>
-            <div id="analysis-detail-loading" class="history-loading" style="display: none;">Fetching analysis…</div>
-            <div id="analysis-detail-error" class="auth-error" style="display: none;" role="alert"></div>
-            <div id="analysis-detail-content"></div>
+
+          <!-- Detailed analysis — collapsed by default behind a toggle -->
+          <div id="analysis-detail" class="breakdown-expandable" style="display: none;">
+            <button type="button" class="breakdown-toggle" id="analysis-detail-toggle">
+              <span>View Full Analysis</span>
+              <span class="breakdown-toggle-chevron">&#9662;</span>
+            </button>
+            <div class="breakdown-body breakdown-collapsed" id="analysis-detail-body">
+              <div id="analysis-detail-loading" class="history-loading" style="display: none;">Fetching analysis…</div>
+              <div id="analysis-detail-error" class="auth-error" style="display: none;" role="alert"></div>
+              <div id="analysis-detail-content"></div>
+            </div>
           </div>
+
           <!-- Authenticated: pick from your samples -->
           <div class="sample-lookup-card" id="sample-picker-section">
             <h3 class="prediction-title">Your Sample Analysis</h3>
-            <p style="color: var(--grey-700); font-size: 13px; margin: 0 0 12px;">Select one of your samples to view its full forensic details.</p>
+            <p style="color: var(--grey-500); font-size: 13px; margin: 0 0 12px;">Select one of your samples to view its full forensic details.</p>
             <div class="sample-lookup-row">
               <select id="sample-picker-select" class="auth-input">
                 <option value="" disabled selected>Select a sample…</option>
               </select>
-              <button type="button" class="btn-primary" id="sample-picker-btn">View Analysis</button>
+              <button type="button" class="btn-gradient" id="sample-picker-btn" style="width:auto;min-width:130px;height:44px;font-size:14px;">View</button>
             </div>
             <div id="sample-picker-error" class="auth-error" style="display: none;" role="alert"></div>
             <div id="sample-picker-loading" class="history-loading" style="display: none;">Fetching analysis…</div>
             <div id="sample-picker-result" style="display: none;"></div>
           </div>
+
           <!-- Manual sample lookup (no account needed) -->
           <div class="sample-lookup-card">
-            <h3 class="prediction-title">Look Up Analysis by Sample ID</h3>
-            <p style="color: var(--grey-700); font-size: 13px; margin: 0 0 12px;">Enter any sample ID to retrieve its analysis (no account required).</p>
+            <h3 class="prediction-title">Look Up by Sample ID</h3>
+            <p style="color: var(--grey-500); font-size: 13px; margin: 0 0 12px;">Enter any sample ID to retrieve its analysis — no account needed.</p>
             <div class="sample-lookup-row">
-              <input type="number" id="lookup-sample-id" class="auth-input" placeholder="Enter sample ID" min="1" />
-              <button type="button" class="btn-primary" id="lookup-sample-btn">Get Analysis</button>
+              <input type="number" id="lookup-sample-id" class="auth-input" placeholder="e.g. 56" min="1" />
+              <button type="button" class="btn-gradient" id="lookup-sample-btn" style="width:auto;min-width:130px;height:44px;font-size:14px;">Get Analysis</button>
             </div>
             <div id="lookup-error" class="auth-error" style="display: none;" role="alert"></div>
             <div id="lookup-loading" class="history-loading" style="display: none;">Fetching analysis…</div>

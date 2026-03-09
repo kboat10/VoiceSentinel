@@ -95,7 +95,9 @@ function clearAuthToken() {
  * @returns {Promise<Response>}
  */
 function apiFetch(path, options = {}) {
-  const url = path.startsWith('http') ? path : `${API_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+  const url = path.startsWith('http') ? path
+    : path.startsWith('/api/') ? path
+    : `${API_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
   const token = getAuthToken();
   const headers = new Headers(options.headers || {});
   if (token) {
@@ -145,7 +147,7 @@ const state = {
   waveformAnimationId: null,
   // Recording capture for playback in review
   mediaRecorder: null,
-  recordedChunks: [],
+  pcmCapture: null,
   recordedBlob: null,
   reviewAudioUrl: null,
   /** Current blob/file in review modal (for POST forensics/predict). */
@@ -974,6 +976,79 @@ async function handleExport(format) {
 document.getElementById('export-json-btn')?.addEventListener('click', () => handleExport('json'));
 document.getElementById('export-csv-btn')?.addEventListener('click', () => handleExport('csv'));
 
+// --- Raw PCM capture: records uncompressed float32 samples directly from the mic ---
+// This avoids any lossy encoding (webm/opus) so no acoustic features are lost.
+// Captures raw PCM samples straight from the mic MediaStreamSource.
+// No codec, no resampling, no processing — the exact digital samples
+// the microphone ADC produces are stored and wrapped in a WAV container.
+function createPcmCapture(audioContext, sourceNode) {
+  const bufferSize = 4096;
+  const processor = audioContext.createScriptProcessor(bufferSize, 1, 1);
+  const pcmChunks = [];
+  let capturing = true;
+  let paused = false;
+
+  processor.onaudioprocess = (e) => {
+    if (!capturing || paused) return;
+    const raw = e.inputBuffer.getChannelData(0);
+    pcmChunks.push(new Float32Array(raw));
+    // Zero the output so the mic never plays back through the speakers
+    const out = e.outputBuffer.getChannelData(0);
+    for (let i = 0; i < out.length; i++) out[i] = 0;
+  };
+
+  sourceNode.connect(processor);
+  // Must connect to destination for onaudioprocess to fire in all browsers;
+  // output is silenced above so there is no feedback.
+  processor.connect(audioContext.destination);
+
+  return {
+    pause() { paused = true; },
+    resume() { paused = false; },
+    stop() {
+      capturing = false;
+      try { processor.disconnect(); } catch (_) {}
+    },
+    toWavBlob() {
+      let totalLength = 0;
+      for (const chunk of pcmChunks) totalLength += chunk.length;
+
+      const sampleRate = audioContext.sampleRate;
+      const numChannels = 1;
+      const bytesPerSample = 2; // 16-bit PCM
+      const dataSize = totalLength * bytesPerSample;
+      const buffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(buffer);
+
+      function w(off, s) { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); }
+      w(0, 'RIFF');
+      view.setUint32(4, 36 + dataSize, true);
+      w(8, 'WAVE');
+      w(12, 'fmt ');
+      view.setUint32(16, 16, true);          // chunk size
+      view.setUint16(20, 1, true);            // PCM format
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);   // native hw rate, no resampling
+      view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+      view.setUint16(32, numChannels * bytesPerSample, true);
+      view.setUint16(34, 16, true);           // bits per sample
+      w(36, 'data');
+      view.setUint32(40, dataSize, true);
+
+      let offset = 44;
+      for (const chunk of pcmChunks) {
+        for (let i = 0; i < chunk.length; i++) {
+          const s = Math.max(-1, Math.min(1, chunk[i]));
+          view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+          offset += 2;
+        }
+      }
+
+      return new Blob([buffer], { type: 'audio/wav' });
+    },
+  };
+}
+
 // --- Home: Record status & timer ---
 function formatDuration(seconds) {
   const m = Math.floor(seconds / 60);
@@ -1069,6 +1144,7 @@ const waveform = {
     analyser.maxDecibels = -25;
     source.connect(analyser);
     this.analyser = analyser;
+    this.sourceNode = source;
     this.dataArray = new Uint8Array(analyser.frequencyBinCount);
     return true;
   },
@@ -1150,22 +1226,11 @@ function startWaveformFromMic() {
       container.classList.remove('show-bars');
       container.classList.add('show-canvas');
       waveform.startWaveformAnimation();
-      // Capture audio for review playback
+      // Raw PCM capture — records uncompressed samples directly from the mic
+      // so no lossy codec (webm/opus) strips acoustic features.
       try {
-        state.recordedChunks = [];
-        const recorder = new MediaRecorder(stream);
-        recorder.ondataavailable = (e) => { if (e.data.size) state.recordedChunks.push(e.data); };
-        recorder.onstop = () => {
-          state.recordedBlob = new Blob(state.recordedChunks, { type: recorder.mimeType || 'audio/webm' });
-          state.mediaRecorder = null;
-          stopWaveform();
-          pendingReviewDuration = state.recordingSeconds;
-          pendingReviewFileName = null;
-          updateRecordUI();
-          openReviewModal(state.recordedBlob);
-        };
-        recorder.start();
-        state.mediaRecorder = recorder;
+        state.pcmCapture = createPcmCapture(waveform.audioContext, waveform.sourceNode);
+        state.mediaRecorder = { _pcm: true };
       } catch (_) {
         state.mediaRecorder = null;
       }
@@ -1257,6 +1322,7 @@ function pauseRecording() {
     clearInterval(state.timerId);
     state.timerId = null;
   }
+  if (state.pcmCapture) state.pcmCapture.pause();
   if (state.waveformAnimationId) {
     cancelAnimationFrame(state.waveformAnimationId);
     state.waveformAnimationId = null;
@@ -1267,6 +1333,7 @@ function pauseRecording() {
 function resumeRecording() {
   if (!state.isRecording || !state.isPaused) return;
   state.isPaused = false;
+  if (state.pcmCapture) state.pcmCapture.resume();
   state.timerId = setInterval(() => {
     state.recordingSeconds++;
     updateRecordUI();
@@ -1285,9 +1352,18 @@ function stopRecordingAndOpenReview() {
   state.isPaused = false;
   if (state.timerId) clearInterval(state.timerId);
   state.timerId = null;
-  if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
-    state.mediaRecorder.stop();
-    // Modal opens from mediaRecorder.onstop
+
+  if (state.pcmCapture) {
+    state.pcmCapture.stop();
+    const wavBlob = state.pcmCapture.toWavBlob();
+    state.pcmCapture = null;
+    state.mediaRecorder = null;
+    stopWaveform();
+    pendingReviewDuration = state.recordingSeconds;
+    pendingReviewFileName = null;
+    updateRecordUI();
+    state.recordedBlob = wavBlob;
+    openReviewModal(wavBlob);
   } else {
     stopWaveform();
     pendingReviewDuration = state.recordingSeconds;
@@ -1423,17 +1499,176 @@ function renderAnalysisContent(container, data) {
   if (!container) return;
   if (typeof data === 'string') {
     container.innerHTML = `<div class="analysis-detail-content-body">${escapeHtml(data)}</div>`;
-  } else if (data && typeof data === 'object') {
-    const rows = Object.entries(data).map(([k, v]) => {
+    return;
+  }
+  if (!data || typeof data !== 'object') {
+    container.innerHTML = '<p style="color:var(--grey-600);">No analysis data available.</p>';
+    return;
+  }
+
+  const metaKeys = new Set(['sample_id', 'filename', 'verdict', 'confidence', 'analyzed_at', 'analysis_url', 'user_id']);
+  const meta = {};
+  const modelVotes = {};
+  const featureGroups = {};
+  const scalarFeatures = {};
+
+  const GROUP_LABELS = {
+    mel: 'Mel Spectrogram', mfcc: 'MFCC Features', ssl: 'SSL Features',
+    chroma: 'Chroma Features', spectral: 'Spectral Features', zcr: 'Zero Crossing Rate',
+    rms: 'RMS Energy', pitch: 'Pitch Features', delta: 'Delta Features',
+    tonnetz: 'Tonnetz Features', contrast: 'Spectral Contrast', bandwidth: 'Bandwidth',
+    rolloff: 'Spectral Rolloff', flatness: 'Spectral Flatness', centroid: 'Spectral Centroid',
+  };
+
+  function classifyKey(k, v) {
+    if (metaKeys.has(k)) { meta[k] = v; return; }
+    if (k === 'model_votes' && typeof v === 'object' && v !== null) {
+      Object.assign(modelVotes, v);
+      return;
+    }
+    const prefixMatch = k.match(/^([a-zA-Z]+)_(\d+)$/);
+    if (prefixMatch && typeof v === 'number') {
+      const prefix = prefixMatch[1].toLowerCase();
+      if (!featureGroups[prefix]) featureGroups[prefix] = {};
+      featureGroups[prefix][k] = v;
+      return;
+    }
+    if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+      const sub = Object.entries(v);
+      if (sub.length) {
+        const numericSubs = sub.filter(([sk]) => /^[a-zA-Z]+_\d+$/.test(sk));
+        if (numericSubs.length > sub.length * 0.5) {
+          for (const [sk, sv] of sub) {
+            classifyKey(sk, sv);
+          }
+          return;
+        }
+      }
+    }
+    if (k === 'acoustic_features' && typeof v === 'object' && v !== null) {
+      for (const [sk, sv] of Object.entries(v)) classifyKey(sk, sv);
+      return;
+    }
+    if (typeof v === 'number') {
+      scalarFeatures[k] = v;
+    } else {
+      scalarFeatures[k] = v;
+    }
+  }
+
+  for (const [k, v] of Object.entries(data)) classifyKey(k, v);
+
+  function fmtVal(v) {
+    if (v == null) return '—';
+    if (typeof v === 'number') {
+      if (Number.isInteger(v)) return String(v);
+      return v.toExponential ? (Math.abs(v) < 0.0001 || Math.abs(v) >= 1e8 ? v.toExponential(4) : v.toFixed(6)) : String(v);
+    }
+    return String(v);
+  }
+
+  function buildMetaRows(obj) {
+    return Object.entries(obj).map(([k, v]) => {
       const label = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
       let val = v;
-      if (typeof v === 'object' && v !== null) val = JSON.stringify(v, null, 2);
-      return `<div class="prediction-row"><span class="prediction-label">${escapeHtml(label)}</span><span class="prediction-value">${escapeHtml(String(val ?? '—'))}</span></div>`;
+      if (k === 'confidence' && typeof v === 'number') val = (v * 100).toFixed(2) + '%';
+      else if (typeof v === 'object' && v !== null) val = JSON.stringify(v);
+      const verdictClass = k === 'verdict' ? (v === 'Real' ? ' prediction-verdict--real' : v === 'Synthetic' ? ' prediction-verdict--synthetic' : '') : '';
+      return `<div class="analysis-meta-row"><span class="analysis-meta-label">${escapeHtml(label)}</span><span class="analysis-meta-value${verdictClass}">${escapeHtml(String(val ?? '—'))}</span></div>`;
     }).join('');
-    container.innerHTML = `<div class="prediction-rows">${rows}</div>`;
-  } else {
-    container.innerHTML = '<p style="color:var(--grey-600);">No analysis data available.</p>';
   }
+
+  function buildFeatureGrid(obj) {
+    const entries = Object.entries(obj);
+    const allNumeric = entries.every(([k]) => /\d+$/.test(k));
+    const sorted = entries.sort((a, b) => {
+      if (allNumeric) {
+        const na = parseInt(a[0].replace(/\D+/g, ''), 10) || 0;
+        const nb = parseInt(b[0].replace(/\D+/g, ''), 10) || 0;
+        return na - nb;
+      }
+      return a[0].localeCompare(b[0]);
+    });
+    return sorted.map(([k, v]) => {
+      const displayKey = allNumeric ? k.replace(/\D+/g, '') : k.replace(/_/g, ' ');
+      return `<div class="feat-cell"><span class="feat-idx">${escapeHtml(displayKey)}</span><span class="feat-val" title="${escapeHtml(fmtVal(v))}">${escapeHtml(fmtVal(v))}</span></div>`;
+    }).join('');
+  }
+
+  function buildModelVotesBar(votes) {
+    const entries = Object.entries(votes).sort((a, b) => Number(b[1]) - Number(a[1]));
+    const max = Math.max(...entries.map(([, v]) => Math.abs(Number(v))), 0.001);
+    const topScore = Math.max(...entries.map(([, s]) => Number(s)));
+    return entries.map(([model, score]) => {
+      const num = Number(score);
+      const pct = Math.min(Math.abs(num) / max * 100, 100).toFixed(1);
+      const isTop = num === topScore;
+      const display = typeof score === 'number'
+        ? (Math.abs(score) < 0.0001 && score !== 0 ? score.toExponential(2) : score.toFixed(4))
+        : String(score);
+      return `<div class="vote-row"><span class="vote-model">${escapeHtml(model.toUpperCase())}</span><div class="vote-bar-track"><div class="vote-bar-fill${isTop ? ' vote-bar--top' : ''}" style="width:${pct}%"></div></div><span class="vote-score">${escapeHtml(display)}</span></div>`;
+    }).join('');
+  }
+
+  let html = '';
+  let sectionIdx = 0;
+
+  if (Object.keys(meta).length) {
+    html += `<div class="analysis-section analysis-meta-section"><div class="analysis-meta-rows">${buildMetaRows(meta)}</div></div>`;
+  }
+
+  if (Object.keys(modelVotes).length) {
+    const sid = `as-${sectionIdx++}`;
+    html += `<div class="analysis-section"><div class="analysis-section-header" data-toggle="${sid}"><span class="analysis-section-title">Model Votes</span><span class="analysis-section-badge">${Object.keys(modelVotes).length} models</span><span class="analysis-chevron">&#9662;</span></div><div class="analysis-section-body" id="section-${sid}">${buildModelVotesBar(modelVotes)}</div></div>`;
+  }
+
+  const groupOrder = Object.keys(featureGroups).sort((a, b) => {
+    const oa = Object.keys(featureGroups[a]).length;
+    const ob = Object.keys(featureGroups[b]).length;
+    return oa - ob;
+  });
+
+  for (const prefix of groupOrder) {
+    const obj = featureGroups[prefix];
+    const count = Object.keys(obj).length;
+    if (!count) continue;
+    const sid = `as-${sectionIdx++}`;
+    const label = GROUP_LABELS[prefix] || (prefix.charAt(0).toUpperCase() + prefix.slice(1) + ' Features');
+    const startCollapsed = count > 20;
+    const chevron = startCollapsed ? '&#9656;' : '&#9662;';
+    const collapsedClass = startCollapsed ? ' analysis-section-collapsed' : '';
+    html += `<div class="analysis-section"><div class="analysis-section-header" data-toggle="${sid}"><span class="analysis-section-title">${escapeHtml(label)}</span><span class="analysis-section-badge">${count} features</span><span class="analysis-chevron">${chevron}</span></div><div class="analysis-section-body${collapsedClass}" id="section-${sid}"><div class="feat-grid">${buildFeatureGrid(obj)}</div></div></div>`;
+  }
+
+  if (Object.keys(scalarFeatures).length) {
+    const sid = `as-${sectionIdx++}`;
+    const rows = Object.entries(scalarFeatures).map(([k, v]) => {
+      const label = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      let val;
+      if (typeof v === 'object' && v !== null) val = JSON.stringify(v);
+      else val = fmtVal(v);
+      return `<div class="analysis-meta-row"><span class="analysis-meta-label">${escapeHtml(label)}</span><span class="analysis-meta-value">${escapeHtml(String(val ?? '—'))}</span></div>`;
+    }).join('');
+    html += `<div class="analysis-section"><div class="analysis-section-header" data-toggle="${sid}"><span class="analysis-section-title">Additional Details</span><span class="analysis-section-badge">${Object.keys(scalarFeatures).length}</span><span class="analysis-chevron">&#9662;</span></div><div class="analysis-section-body" id="section-${sid}"><div class="analysis-meta-rows">${rows}</div></div></div>`;
+  }
+
+  if (!html) {
+    container.innerHTML = '<p style="color:var(--grey-600);">No analysis data available.</p>';
+    return;
+  }
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.analysis-section-header[data-toggle]').forEach((hdr) => {
+    hdr.addEventListener('click', () => {
+      const id = hdr.getAttribute('data-toggle');
+      const body = container.querySelector(`#section-${id}`);
+      if (!body) return;
+      body.classList.toggle('analysis-section-collapsed');
+      const chev = hdr.querySelector('.analysis-chevron');
+      if (chev) chev.textContent = body.classList.contains('analysis-section-collapsed') ? '\u25B8' : '\u25BE';
+    });
+  });
 }
 
 async function fetchAnalysis(sampleId, opts) {
@@ -1444,7 +1679,7 @@ async function fetchAnalysis(sampleId, opts) {
   if (cardEl) cardEl.style.display = '';
 
   try {
-    const res = await apiFetch(`forensics/analysis/${encodeURIComponent(sampleId)}`);
+    const res = await apiFetch(`/api/forensics/analysis/${encodeURIComponent(sampleId)}`);
     const text = await res.text();
     if (loadingEl) loadingEl.style.display = 'none';
     if (!res.ok) {
@@ -1470,7 +1705,7 @@ async function fetchSampleAnalysis(sampleId, userId, opts) {
   if (cardEl) cardEl.style.display = '';
 
   try {
-    const res = await apiFetch(`forensics/sample/${encodeURIComponent(sampleId)}?user_id=${encodeURIComponent(userId)}`);
+    const res = await apiFetch(`/api/forensics/sample/${encodeURIComponent(sampleId)}?user_id=${encodeURIComponent(userId)}`);
     const text = await res.text();
     if (loadingEl) loadingEl.style.display = 'none';
     if (!res.ok) {
@@ -1520,22 +1755,49 @@ function populateSamplePicker(historyData) {
 function showPredictionResult(data) {
   const card = document.getElementById('prediction-result');
   if (!card) return;
-  document.getElementById('pred-sample-id').textContent = data.sample_id ?? '—';
-  const verdictEl = document.getElementById('pred-verdict');
+
   const v = data.verdict ?? '—';
+  const isReal = v === 'Real';
+  const isSynthetic = v === 'Synthetic';
+
+  const iconEl = document.getElementById('verdict-icon');
+  if (iconEl) {
+    iconEl.className = 'verdict-icon';
+    if (isReal) { iconEl.classList.add('verdict-icon--real'); iconEl.textContent = '✓'; }
+    else if (isSynthetic) { iconEl.classList.add('verdict-icon--synthetic'); iconEl.textContent = '✗'; }
+    else { iconEl.classList.add('verdict-icon--unknown'); iconEl.textContent = '?'; }
+  }
+
+  const verdictEl = document.getElementById('pred-verdict');
   verdictEl.textContent = v;
-  verdictEl.className = 'prediction-value';
-  if (v === 'Real') verdictEl.classList.add('prediction-verdict--real');
-  else if (v === 'Synthetic') verdictEl.classList.add('prediction-verdict--synthetic');
-  document.getElementById('pred-confidence').textContent = data.confidence != null ? `${(data.confidence * 100).toFixed(1)}%` : '—';
+  verdictEl.className = 'verdict-label';
+  if (isReal) verdictEl.classList.add('verdict-label--real');
+  else if (isSynthetic) verdictEl.classList.add('verdict-label--synthetic');
+
+  const confEl = document.getElementById('pred-confidence');
+  confEl.textContent = data.confidence != null ? `${(data.confidence * 100).toFixed(1)}% confidence` : '';
+
+  document.getElementById('pred-sample-id').textContent = data.sample_id ?? '—';
+
+  const fnEl = document.getElementById('pred-filename');
+  fnEl.textContent = data.filename ?? '';
+
   const urlEl = document.getElementById('pred-analysis-url');
   if (data.analysis_url) {
-    urlEl.innerHTML = `<a href="${escapeHtml(data.analysis_url)}" target="_blank" rel="noopener">View analysis</a>`;
+    urlEl.innerHTML = `<a href="${escapeHtml(data.analysis_url)}" target="_blank" rel="noopener">View raw analysis ↗</a>`;
   } else {
-    urlEl.textContent = '—';
+    urlEl.textContent = '';
   }
-  document.getElementById('pred-filename').textContent = data.filename ?? '—';
+
   card.style.display = '';
+
+  const detailCard = document.getElementById('analysis-detail');
+  const detailBody = document.getElementById('analysis-detail-body');
+  const detailToggle = document.getElementById('analysis-detail-toggle');
+  if (detailBody) {
+    detailBody.classList.add('breakdown-collapsed');
+    if (detailToggle) detailToggle.classList.remove('open');
+  }
 }
 
 function renderLocalSamples() {
@@ -2071,6 +2333,15 @@ document.getElementById('clear-history-btn')?.addEventListener('click', async ()
   } finally {
     if (btn) btn.disabled = false;
   }
+});
+
+// --- Analysis detail expand/collapse toggle ---
+document.getElementById('analysis-detail-toggle')?.addEventListener('click', () => {
+  const body = document.getElementById('analysis-detail-body');
+  const btn = document.getElementById('analysis-detail-toggle');
+  if (!body) return;
+  const collapsed = body.classList.toggle('breakdown-collapsed');
+  if (btn) btn.classList.toggle('open', !collapsed);
 });
 
 // --- Sample Picker (authenticated users) ---
