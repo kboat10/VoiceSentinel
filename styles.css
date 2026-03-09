@@ -815,6 +815,9 @@ body {
 [data-theme="dark"] .analysis-section-header:hover { background: rgba(255,255,255,0.04); }
 [data-theme="dark"] .feat-cell { background: rgba(255,255,255,0.06); }
 [data-theme="dark"] .vote-bar-track { background: rgba(255,255,255,0.08); }
+[data-theme="dark"] .analysis-prose .md-list li { background: rgba(255,255,255,0.05); }
+[data-theme="dark"] .analysis-prose .md-p { color: var(--grey-400); }
+[data-theme="dark"] .analysis-prose .md-list li { color: var(--grey-400); }
 [data-theme="dark"] .card { border-color: var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 [data-theme="dark"] .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
 [data-theme="dark"] .sidebar { box-shadow: 1px 0 8px rgba(0,0,0,0.15); }
@@ -1661,6 +1664,82 @@ body {
   opacity: 0;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+/* Prose analysis (markdown rendered) */
+.analysis-prose {
+  padding: 4px 0;
+  line-height: 1.7;
+  color: var(--dark-text);
+  font-size: 14px;
+}
+.analysis-prose .md-h2 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--primary-blue);
+  margin: 22px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.analysis-prose .md-h2:first-child { margin-top: 0; }
+.analysis-prose .md-h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dark-text);
+  margin: 16px 0 6px;
+}
+.analysis-prose .md-p {
+  margin: 0 0 10px;
+  color: var(--grey-600);
+  line-height: 1.7;
+}
+.analysis-prose .md-p strong {
+  color: var(--dark-text);
+  font-weight: 600;
+}
+.analysis-prose .md-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+.analysis-prose .md-list li {
+  position: relative;
+  padding: 8px 12px 8px 28px;
+  margin: 0 0 6px;
+  background: var(--grey-100);
+  border-radius: var(--radius-xs);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--grey-600);
+}
+.analysis-prose .md-list li::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 15px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary-blue);
+}
+.analysis-prose .md-list li.md-ol::before {
+  content: counter(md-ol) '.';
+  counter-increment: md-ol;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--primary-blue);
+  top: 8px;
+  left: 10px;
+}
+.analysis-prose .md-list:has(li.md-ol) {
+  counter-reset: md-ol;
+}
+.analysis-prose .md-list li strong {
+  color: var(--dark-text);
 }
 
 /* Model votes bar chart */

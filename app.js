@@ -1517,10 +1517,51 @@ function toggleReviewPlayback() {
   }
 }
 
+function simpleMarkdownToHtml(md) {
+  if (!md || typeof md !== 'string') return '';
+  let s = md;
+  s = s.replace(/\r\n/g, '\n');
+  s = s.replace(/(#{2,3}\s)/g, '\n$1');
+  s = s.replace(/\*\*(\d+)\)\s/g, '\n**$1) ');
+  s = s.replace(/\n{3,}/g, '\n\n');
+
+  s = s.replace(/^##\s+(.+)$/gm, '<h2 class="md-h2">$1</h2>');
+  s = s.replace(/^###\s+(.+)$/gm, '<h3 class="md-h3">$1</h3>');
+
+  s = s.replace(/\*\*(\d+\)\s[^*]+)\*\*/g, '<h3 class="md-h3">$1</h3>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  s = s.replace(/(?:^|\n)\s*\*\s+/g, '\n<li>');
+  s = s.replace(/(?:^|\n)\s*(\d+)\.\s+<strong>/g, '\n<li class="md-ol"><strong>');
+  s = s.replace(/(?:^|\n)\s*(\d+)\.\s+/g, '\n<li class="md-ol">');
+
+  const lines = s.split('\n');
+  let html = '';
+  let inList = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('<li')) {
+      if (!inList) { html += '<ul class="md-list">'; inList = true; }
+      html += trimmed.endsWith('</li>') ? trimmed : trimmed + '</li>';
+    } else {
+      if (inList) { html += '</ul>'; inList = false; }
+      if (trimmed.startsWith('<h2') || trimmed.startsWith('<h3')) {
+        html += trimmed;
+      } else {
+        html += '<p class="md-p">' + trimmed + '</p>';
+      }
+    }
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
 function renderAnalysisContent(container, data) {
   if (!container) return;
   if (typeof data === 'string') {
-    container.innerHTML = `<div class="analysis-detail-content-body">${escapeHtml(data)}</div>`;
+    const rendered = simpleMarkdownToHtml(data);
+    container.innerHTML = `<div class="analysis-prose">${rendered || escapeHtml(data)}</div>`;
     return;
   }
   if (!data || typeof data !== 'object') {
@@ -1533,6 +1574,7 @@ function renderAnalysisContent(container, data) {
   const modelVotes = {};
   const featureGroups = {};
   const scalarFeatures = {};
+  let proseAnalysis = null;
 
   const GROUP_LABELS = {
     mel: 'Mel Spectrogram', mfcc: 'MFCC Features', ssl: 'SSL Features',
@@ -1544,6 +1586,10 @@ function renderAnalysisContent(container, data) {
 
   function classifyKey(k, v) {
     if (metaKeys.has(k)) { meta[k] = v; return; }
+    if ((k === 'analysis' || k === 'report' || k === 'summary') && typeof v === 'string' && v.length > 100) {
+      proseAnalysis = v;
+      return;
+    }
     if (k === 'model_votes' && typeof v === 'object' && v !== null) {
       Object.assign(modelVotes, v);
       return;
@@ -1660,6 +1706,12 @@ function renderAnalysisContent(container, data) {
     const chevron = startCollapsed ? '&#9656;' : '&#9662;';
     const collapsedClass = startCollapsed ? ' analysis-section-collapsed' : '';
     html += `<div class="analysis-section"><div class="analysis-section-header" data-toggle="${sid}"><span class="analysis-section-title">${escapeHtml(label)}</span><span class="analysis-section-badge">${count} features</span><span class="analysis-chevron">${chevron}</span></div><div class="analysis-section-body${collapsedClass}" id="section-${sid}"><div class="feat-grid">${buildFeatureGrid(obj)}</div></div></div>`;
+  }
+
+  if (proseAnalysis) {
+    const sid = `as-${sectionIdx++}`;
+    const rendered = simpleMarkdownToHtml(proseAnalysis);
+    html += `<div class="analysis-section"><div class="analysis-section-header" data-toggle="${sid}"><span class="analysis-section-title">Forensic Analysis Report</span><span class="analysis-chevron">&#9662;</span></div><div class="analysis-section-body" id="section-${sid}"><div class="analysis-prose">${rendered}</div></div></div>`;
   }
 
   if (Object.keys(scalarFeatures).length) {
