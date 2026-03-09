@@ -161,6 +161,7 @@ const welcomeScreen = document.getElementById('screen-welcome');
 const appShell = document.getElementById('app-shell');
 const panels = {
   home: document.getElementById('panel-home'),
+  voiceLab: document.getElementById('panel-voice-lab'),
   compare: document.getElementById('panel-compare'),
   settings: document.getElementById('panel-settings'),
   changeUserType: document.getElementById('panel-change-user-type'),
@@ -188,6 +189,7 @@ function leaveApp() {
 // Map sidebar data-nav to panel keys
 const navToPanelKey = {
   'home': 'home',
+  'voice-lab': 'voiceLab',
   'compare': 'compare',
   'settings': 'settings',
   'change-user-type': 'changeUserType',
@@ -227,6 +229,11 @@ document.getElementById('sidebar-logout')?.addEventListener('click', () => {
   navTo('welcome');
 });
 
+document.getElementById('home-go-lab')?.addEventListener('click', () => navTo('voice-lab'));
+document.getElementById('home-go-compare')?.addEventListener('click', () => navTo('compare'));
+document.getElementById('home-go-breakdown')?.addEventListener('click', () => navTo('audio-breakdown'));
+document.getElementById('home-go-history')?.addEventListener('click', () => navTo('history'));
+
 // --- Restore session on load/refresh: load identity from localStorage, then confirm from API ---
 if (getAuthToken()) {
   const storedId = getStoredUserId();
@@ -234,6 +241,11 @@ if (getAuthToken()) {
   loadRecordings();
   renderRecordings();
   enterApp();
+  {
+    const name = localStorage.getItem('voiceSentinelUserName');
+    const greetEl = document.getElementById('home-greeting');
+    if (greetEl && name) greetEl.textContent = 'Welcome back, ' + name;
+  }
   (async () => {
     try {
       const uid = state.userId ?? getStoredUserId();
@@ -365,6 +377,11 @@ async function handleRegister() {
       const userId = data && typeof data === 'object' ? (data.user_id ?? data.id ?? data.userId) : null;
       storeUserIdentity(userId, email);
       enterApp();
+      {
+        const name = localStorage.getItem('voiceSentinelUserName');
+        const greetEl = document.getElementById('home-greeting');
+        if (greetEl && name) greetEl.textContent = 'Welcome back, ' + name;
+      }
       return;
     }
 
@@ -452,6 +469,11 @@ async function handleLogin() {
         storeUserIdentity(data, email);
       }
       enterApp();
+      {
+        const name = localStorage.getItem('voiceSentinelUserName');
+        const greetEl = document.getElementById('home-greeting');
+        if (greetEl && name) greetEl.textContent = 'Welcome back, ' + name;
+      }
       return;
     }
 
