@@ -2,7 +2,7 @@
  * Voice Sentinel – Web UI.
  * API base: local/dev = http://45.55.247.199/api; on Vercel = /api (proxied in vercel.json).
  * All APIs use this base; none send the user's name.
- * Endpoints: POST /auth/register, POST /auth/login, GET /user/me, PATCH /user/update, POST /auth/change-password, DELETE /user/terminate, GET /system/stats, POST /forensics/predict (multipart: file, user_id).
+ * Endpoints: POST /auth/register, POST /auth/login, GET /user/me, PATCH /user/update, POST /auth/change-password, DELETE /user/terminate, GET /system/stats, POST /forensics/predict (multipart: file, user_id, recording_input_type).
  */
 const API_BASE =
   typeof window !== 'undefined' &&
@@ -15,9 +15,11 @@ const AUTH_TOKEN_KEY = 'voiceSentinelToken';
 const USER_ID_KEY = 'voiceSentinelUserId';
 const USER_EMAIL_KEY = 'voiceSentinelEmail';
 const SAMPLES_STORAGE_KEY = 'voiceSentinelSamples';
+const RECORDING_INPUT_TYPE_KEY = 'recording_input_type';
+const PREDICTION_FEEDBACK_ENDPOINT = 'forensics/feedback';
 
-const ALLOWED_AUDIO_TYPES = ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/aac'];
-const ALLOWED_AUDIO_EXTS = ['.wav', '.mp3', '.m4a'];
+const ALLOWED_AUDIO_TYPES = ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3'];
+const ALLOWED_AUDIO_EXTS = ['.wav', '.mp3'];
 
 function isAllowedAudioFile(file) {
   if (!file) return false;
@@ -152,6 +154,12 @@ const state = {
   reviewAudioUrl: null,
   /** Current blob/file in review modal (for POST forensics/predict). */
   reviewBlob: null,
+  /** Source type sent to API: upload | live_source | live_user */
+  reviewInputType: null,
+  /** Current live capture type selected before recording starts. */
+  currentLiveInputType: null,
+  /** Current prediction context used when collecting user vote/feedback. */
+  predictionFeedbackContext: null,
   /** User id from GET /user/me (for forensics API). */
   userId: null,
 };
@@ -374,14 +382,10 @@ async function handleRegister() {
         localStorage.setItem(EDIT_PROFILE_STORAGE_KEY, level);
         if (name) localStorage.setItem(USER_NAME_STORAGE_KEY, name);
       } catch (_) {}
-      const userId = data && typeof data === 'object' ? (data.user_id ?? data.id ?? data.userId) : null;
-      storeUserIdentity(userId, email);
-      enterApp();
-      {
-        const name = localStorage.getItem('voiceSentinelUserName');
-        const greetEl = document.getElementById('home-greeting');
-        if (greetEl && name) greetEl.textContent = 'Welcome back, ' + name;
-      }
+      setAuthMode(true);
+      const passwordConfirmEl = document.getElementById('auth-password-confirm');
+      if (passwordConfirmEl) passwordConfirmEl.value = '';
+      alert('Registration successful. Please sign in with your new account.');
       return;
     }
 
@@ -1383,6 +1387,8 @@ function stopRecordingAndOpenReview() {
     stopWaveform();
     pendingReviewDuration = state.recordingSeconds;
     pendingReviewFileName = null;
+    state.reviewInputType = state.currentLiveInputType || 'live_user';
+    state.currentLiveInputType = null;
     updateRecordUI();
     state.recordedBlob = wavBlob;
     openReviewModal(wavBlob);
@@ -1390,6 +1396,8 @@ function stopRecordingAndOpenReview() {
     stopWaveform();
     pendingReviewDuration = state.recordingSeconds;
     pendingReviewFileName = null;
+    state.reviewInputType = state.currentLiveInputType || 'live_user';
+    state.currentLiveInputType = null;
     updateRecordUI();
     openReviewModal(null);
   }
@@ -1485,6 +1493,7 @@ function closeReviewModal() {
     state.reviewAudioUrl = null;
   }
   state.reviewBlob = null;
+  state.reviewInputType = null;
   if (playBtn) {
     playBtn.disabled = true;
     const iconPlay = playBtn.querySelector('.review-icon-play');
@@ -1863,6 +1872,14 @@ function showPredictionResult(data) {
     urlEl.textContent = '';
   }
 
+  state.predictionFeedbackContext = {
+    sample_id: data.sample_id ?? null,
+    predicted_verdict: data.verdict ?? null,
+    predicted_confidence: data.confidence ?? null,
+    recording_input_type: data.recording_input_type ?? null,
+  };
+  resetPredictionFeedbackUI();
+
   card.style.display = '';
 
   const detailCard = document.getElementById('analysis-detail');
@@ -1871,6 +1888,99 @@ function showPredictionResult(data) {
   if (detailBody) {
     detailBody.classList.add('breakdown-collapsed');
     if (detailToggle) detailToggle.classList.remove('open');
+  }
+}
+
+function setPredictionFeedbackStatus(message, isError) {
+  const statusEl = document.getElementById('prediction-feedback-status');
+  if (!statusEl) return;
+  if (!message) {
+    statusEl.style.display = 'none';
+    statusEl.textContent = '';
+    statusEl.classList.remove('feedback-status-error', 'feedback-status-success');
+    return;
+  }
+  statusEl.textContent = message;
+  statusEl.style.display = '';
+  statusEl.classList.toggle('feedback-status-error', !!isError);
+  statusEl.classList.toggle('feedback-status-success', !isError);
+}
+
+function resetPredictionFeedbackUI() {
+  const box = document.getElementById('prediction-feedback');
+  const details = document.getElementById('prediction-feedback-details');
+  const notesEl = document.getElementById('prediction-feedback-notes');
+  const correctedVerdictEl = document.getElementById('prediction-feedback-corrected-verdict');
+  const submitBtn = document.getElementById('prediction-feedback-submit');
+  const yesBtn = document.getElementById('prediction-feedback-yes');
+  const noBtn = document.getElementById('prediction-feedback-no');
+  if (box) box.style.display = '';
+  if (details) details.style.display = 'none';
+  if (notesEl) notesEl.value = '';
+  if (correctedVerdictEl) correctedVerdictEl.value = '';
+  if (submitBtn) submitBtn.disabled = false;
+  if (yesBtn) yesBtn.disabled = false;
+  if (noBtn) noBtn.disabled = false;
+  setPredictionFeedbackStatus('', false);
+}
+
+async function submitPredictionFeedback(vote) {
+  const ctx = state.predictionFeedbackContext;
+  const notesEl = document.getElementById('prediction-feedback-notes');
+  const correctedVerdictEl = document.getElementById('prediction-feedback-corrected-verdict');
+  const submitBtn = document.getElementById('prediction-feedback-submit');
+  const yesBtn = document.getElementById('prediction-feedback-yes');
+  const noBtn = document.getElementById('prediction-feedback-no');
+  const details = document.getElementById('prediction-feedback-details');
+
+  if (!ctx || ctx.sample_id == null) {
+    setPredictionFeedbackStatus('No sample is available for feedback yet.', true);
+    return;
+  }
+
+  const correctedVerdict = vote === 'incorrect' ? (correctedVerdictEl?.value || null) : null;
+  const notes = notesEl?.value?.trim() || null;
+  const userId = state.userId ?? getStoredUserId();
+
+  if (yesBtn) yesBtn.disabled = true;
+  if (noBtn) noBtn.disabled = true;
+  if (submitBtn) submitBtn.disabled = true;
+  setPredictionFeedbackStatus('Submitting feedback...', false);
+
+  try {
+    const payload = {
+      sample_id: ctx.sample_id,
+      user_id: userId,
+      vote,
+      predicted_verdict: ctx.predicted_verdict,
+      predicted_confidence: ctx.predicted_confidence,
+      corrected_verdict: correctedVerdict,
+      feedback_notes: notes,
+      recording_input_type: ctx.recording_input_type,
+    };
+
+    const res = await apiFetch(PREDICTION_FEEDBACK_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text();
+
+    if (!res.ok) {
+      setPredictionFeedbackStatus(parseApiError(res, text), true);
+      if (yesBtn) yesBtn.disabled = false;
+      if (noBtn) noBtn.disabled = false;
+      if (submitBtn) submitBtn.disabled = false;
+      return;
+    }
+
+    setPredictionFeedbackStatus('Thanks. Your feedback was submitted.', false);
+    if (details) details.style.display = 'none';
+  } catch (err) {
+    setPredictionFeedbackStatus(formatNetworkError(err), true);
+    if (yesBtn) yesBtn.disabled = false;
+    if (noBtn) noBtn.disabled = false;
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
 
@@ -1916,7 +2026,7 @@ async function submitRecordingFromReview() {
   }
 
   if (blob instanceof File && !isAllowedAudioFile(blob)) {
-    if (reviewErrorEl) { reviewErrorEl.textContent = 'Only WAV, MP3, and M4A files are accepted. Please upload a supported file.'; reviewErrorEl.style.display = 'block'; }
+    if (reviewErrorEl) { reviewErrorEl.textContent = 'Only WAV and MP3 files are accepted. Please upload a supported file.'; reviewErrorEl.style.display = 'block'; }
     return;
   }
 
@@ -1927,6 +2037,8 @@ async function submitRecordingFromReview() {
   const filename = blob instanceof File ? blob.name : 'recording.wav';
   formData.append('file', blob, filename);
   if (userId != null) formData.append('user_id', String(userId));
+  const recordingInputType = state.reviewInputType || (blob instanceof File ? 'upload' : 'live_user');
+  formData.append(RECORDING_INPUT_TYPE_KEY, recordingInputType);
 
   try {
     const res = await apiFetch('forensics/predict', {
@@ -1957,6 +2069,7 @@ async function submitRecordingFromReview() {
         verdict,
         confidence,
         analysis_url: analysisUrl,
+        recording_input_type: recordingInputType,
         source: blob instanceof File ? 'upload' : 'recording',
         date: new Date().toISOString(),
       };
@@ -1987,7 +2100,7 @@ async function submitRecordingFromReview() {
     }
 
     if (res.status === 415) {
-      if (reviewErrorEl) { reviewErrorEl.textContent = 'Unsupported audio format. Only WAV, MP3, and M4A files are accepted.'; reviewErrorEl.style.display = 'block'; }
+      if (reviewErrorEl) { reviewErrorEl.textContent = 'Unsupported audio format. Only WAV and MP3 files are accepted.'; reviewErrorEl.style.display = 'block'; }
     } else if (res.status === 500) {
       if (reviewErrorEl) { reviewErrorEl.textContent = 'Server processing error. Please try again in a moment.'; reviewErrorEl.style.display = 'block'; }
     } else {
@@ -2008,6 +2121,8 @@ document.getElementById('btn-record')?.addEventListener('click', () => {
   if (state.isRecording) {
     if (state.isPaused) resumeRecording();
   } else {
+    const fromExternalSource = confirm('Are you recording from an external source (speaker/device)? Click OK for source audio or Cancel for your own live voice.');
+    state.currentLiveInputType = fromExternalSource ? 'live_source' : 'live_user';
     startMockRecording();
   }
 });
@@ -2053,12 +2168,13 @@ uploadAudioInput?.addEventListener('change', () => {
   const file = uploadAudioInput.files?.[0];
   if (!file) return;
   if (!isAllowedAudioFile(file)) {
-    alert('Only WAV, MP3, and M4A files are accepted. Please select a supported file.');
+    alert('Only WAV and MP3 files are accepted. Please select a supported file.');
     uploadAudioInput.value = '';
     return;
   }
   pendingReviewDuration = 0;
   pendingReviewFileName = file.name;
+  state.reviewInputType = 'upload';
   openReviewModal(file);
   uploadAudioInput.value = '';
 });
@@ -2151,7 +2267,7 @@ function setupCompareUpload(index) {
     const file = fileInput.files?.[0];
     if (!file) return;
     if (!isAllowedAudioFile(file)) {
-      alert('Only WAV, MP3, and M4A files are accepted. Please select a supported file.');
+      alert('Only WAV and MP3 files are accepted. Please select a supported file.');
       fileInput.value = '';
       return;
     }
@@ -2191,6 +2307,7 @@ document.getElementById('compare-submit-btn')?.addEventListener('click', async (
       const fd = new FormData();
       fd.append('file', file, file.name);
       fd.append('user_id', String(userId));
+      fd.append(RECORDING_INPUT_TYPE_KEY, 'upload');
       const res = await apiFetch('forensics/predict', { method: 'POST', body: fd });
       const text = await res.text();
       if (!res.ok) throw new Error(parseApiError(res, text));
@@ -2478,4 +2595,18 @@ document.getElementById('lookup-sample-btn')?.addEventListener('click', async ()
   });
   if (resultEl && data != null) resultEl.style.display = '';
   if (btn) btn.disabled = false;
+});
+
+document.getElementById('prediction-feedback-yes')?.addEventListener('click', () => {
+  submitPredictionFeedback('correct');
+});
+
+document.getElementById('prediction-feedback-no')?.addEventListener('click', () => {
+  const details = document.getElementById('prediction-feedback-details');
+  if (details) details.style.display = '';
+  setPredictionFeedbackStatus('Provide optional details, then submit.', false);
+});
+
+document.getElementById('prediction-feedback-submit')?.addEventListener('click', () => {
+  submitPredictionFeedback('incorrect');
 });

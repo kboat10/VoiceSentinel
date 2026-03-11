@@ -1,66 +1,100 @@
-# Voice Sentinel – Web App (UI only)
+# Voice Sentinel - Web App
 
-A web UI version of the Voice Sentinel mobile app. Same look and flow; **no backend or recording APIs connected yet**.
+Voice Sentinel is a browser-based audio forensics UI with live backend integration for authentication, prediction, history, comparison, exports, and account management.
 
 ## Stack
 
-- **HTML** – structure and screens
-- **CSS** – theme (colors, cards, buttons from the Flutter app), layout, responsive
-- **Vanilla JS** – navigation, drawer, dark mode, mock “record” and “upload” behaviour
+- HTML for structure and screens
+- CSS for layout, theming, and responsive behavior
+- Vanilla JavaScript for state, navigation, recording, uploads, and API integration
 
-No build step, no framework. Easy to open and tweak; you can plug in APIs later with `fetch()` or any client library.
+No build step is required.
 
 ## Run locally
 
 1. Open the folder in a terminal.
-2. Serve the folder (so links work without file://):
+2. Serve it with a static server:
 
-   ```bash
-   npx serve .
-   ```
-   or
-   ```bash
-   python3 -m http.server 8080
-   ```
-   then open `http://localhost:8080` (or the port shown).
+```bash
+npx serve .
+```
 
-   Or open `index.html` directly in a browser (some features may be limited under `file://`).
+or
 
-## Screens
+```bash
+python3 -m http.server 8080
+```
 
-- **Welcome** – Logo, “Sign In / Sign Up”, “Skip & Continue”; auth form (email, password, user type).
-- **Home** – Deepfake Detection hero, Ready to Scan card, Audio Preview (mock waveform when “recording”), Upload Audio card, Recent Recordings list, “Analyze Audio” / “Stop Recording”, “View History”.
-- **Settings** – Dark mode toggle, Audio (placeholder), Account (placeholder).
-- **Change user type** – Dropdown + Save (stored in `localStorage`).
-- **Audio breakdown** – Placeholder “No recording selected”.
+3. Open the shown local URL (for example `http://localhost:8080`).
 
-## Theme
+## Backend and API base
 
-Matches the Flutter app:
+- Local/dev: `http://45.55.247.199/api`
+- Vercel (`*.vercel.app`): `/api` (proxied by `vercel.json`)
 
-- Primary blue: `#285BAE`, light blue: `#32B5E8`
-- Light: background `#F8F9FA`, surface white
-- Dark: background `#0D1321`, surface `#1A2332`
-- Gradient buttons: light blue → primary blue
+## Supported audio formats
 
-Dark mode is toggled in Settings and persisted in `localStorage`.
+- WAV
+- MP3
 
-## Deploying to Vercel
+M4A is not supported.
 
-The app is static (HTML, CSS, JS) and works on Vercel with no code changes:
+## Key API flows
 
-1. **Connect the repo** to Vercel (Import Git Repository → select `kboat10/VoiceSentinel`).
-2. **Leave build settings as default** — no build command; Vercel will serve the root as a static site.
-3. **API, CORS, and HTTPS**: The app talks to `http://45.55.247.199/api` for auth and user actions. On Vercel, **CORS and mixed content are handled for you**:
-   - **vercel.json** rewrites `/api/*` to `http://45.55.247.199/api/*`, so the browser only sends same-origin requests to your Vercel domain (no CORS).
-   - The app automatically uses the proxy (base URL `/api`) when `hostname` ends with `vercel.app`, so login, change password, user type, delete account, and system stats work without changing the backend.
-   - Locally, the app still calls `http://45.55.247.199/api` directly (no proxy).
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /user/me`
+- `PATCH /user/update`
+- `POST /auth/change-password`
+- `DELETE /user/terminate`
+- `GET /system/stats`
+- `POST /forensics/predict`
+- `GET /forensics/history`
+- `DELETE /forensics/history/clear`
+- `GET /forensics/compare`
+- `GET /forensics/analysis/:sample_id`
+- `GET /forensics/sample/:sample_id`
+- `POST /forensics/feedback`
+- `GET /export/results`
+- `GET /export/csv`
 
-Assets (images, CSS, JS) and in-app features (recording, upload, navigation, settings) work the same on Vercel as locally.
+## Forensics predict payload
 
-## Next steps (when you add APIs)
+`POST /forensics/predict` uses multipart form-data and sends:
 
-- Replace mock “Analyze Audio” / “Stop Recording” with real MediaRecorder or your backend flow.
-- Replace “Upload Audio” with a file input and your upload endpoint.
-- Replace “View History” and recording list with data from your API.
-- Wire Sign In / Sign Up to your auth API.
+- `file`
+- `user_id` (when available)
+- `recording_input_type`
+
+`recording_input_type` values:
+
+- `upload`
+- `live_source`
+- `live_user`
+
+## Auth behavior
+
+- Sign up does not auto-login.
+- After successful registration, the UI switches back to sign-in mode and asks the user to log in.
+
+## Prediction feedback payload
+
+After a prediction is shown in Audio Breakdown, the UI asks the user to vote on whether the prediction was correct.
+
+`POST /forensics/feedback` sends JSON:
+
+- `sample_id`
+- `user_id` (nullable)
+- `vote` (`correct` or `incorrect`)
+- `predicted_verdict`
+- `predicted_confidence`
+- `corrected_verdict` (nullable, used when vote is `incorrect`)
+- `feedback_notes` (nullable)
+- `recording_input_type` (`upload`, `live_source`, or `live_user`)
+
+## Deploy to Vercel
+
+The app is static and can be deployed directly from the repository.
+
+- `vercel.json` rewrites `/api/:path*` to `http://45.55.247.199/api/:path*`.
+- This keeps browser API calls same-origin on Vercel.

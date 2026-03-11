@@ -255,7 +255,7 @@
               <div class="home-hiw-step">
                 <div class="home-hiw-num">1</div>
                 <h4>Record or Upload</h4>
-                <p>Head to the Voice Lab and record live audio from your mic, or upload a WAV, MP3, or M4A file from your device.</p>
+                <p>Head to the Voice Lab and record live audio from your mic, or upload a WAV or MP3 file from your device.</p>
               </div>
               <div class="home-hiw-step">
                 <div class="home-hiw-num">2</div>
@@ -273,7 +273,7 @@
           <div class="home-about-card">
             <h3>About Voice Sentinel</h3>
             <p>Voice Sentinel is an AI-powered audio forensics platform designed to detect synthetic and deepfake speech. Whether you are a journalist verifying a source, a security professional auditing calls, or simply curious about an audio clip, we give you the tools and transparency to know what is real.</p>
-            <p style="margin-top:10px;color:var(--grey-500);font-size:13px;">Built with multi-model ensemble analysis. Supports WAV, MP3 and M4A. Works in your browser.</p>
+            <p style="margin-top:10px;color:var(--grey-500);font-size:13px;">Built with multi-model ensemble analysis. Supports WAV and MP3. Works in your browser.</p>
           </div>
         </div>
       </section>
@@ -321,7 +321,7 @@
             <p class="recording-timer" id="recording-timer">00:00:00</p>
           </div>
 
-          <input type="file" id="upload-audio-input" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/x-wav,audio/mp4,audio/x-m4a" style="display: none;" aria-label="Upload audio file" />
+          <input type="file" id="upload-audio-input" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav,audio/mp3" style="display: none;" aria-label="Upload audio file" />
           <div class="card upload-card" id="upload-card" role="button" tabindex="0">
             <div class="card-inner upload-card">
               <div class="icon-circle">
@@ -497,7 +497,7 @@
           <div class="compare-uploads">
             <!-- Sample 1 -->
             <div class="compare-upload-card" id="compare-card-1">
-              <input type="file" id="compare-file-1" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/x-wav,audio/mp4,audio/x-m4a" style="display: none;" />
+              <input type="file" id="compare-file-1" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav,audio/mp3" style="display: none;" />
               <div class="compare-upload-area" id="compare-area-1" role="button" tabindex="0">
                 <div class="icon-circle">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -508,7 +508,7 @@
             </div>
             <!-- Sample 2 -->
             <div class="compare-upload-card" id="compare-card-2">
-              <input type="file" id="compare-file-2" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/x-wav,audio/mp4,audio/x-m4a" style="display: none;" />
+              <input type="file" id="compare-file-2" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav,audio/mp3" style="display: none;" />
               <div class="compare-upload-area" id="compare-area-2" role="button" tabindex="0">
                 <div class="icon-circle">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -563,6 +563,26 @@
               <span class="verdict-meta-item"><strong>Sample</strong> #<span id="pred-sample-id">—</span></span>
               <span class="verdict-meta-item" id="pred-filename">—</span>
               <span class="verdict-meta-item" id="pred-analysis-url"></span>
+            </div>
+
+            <div id="prediction-feedback" class="prediction-feedback" style="display: none;">
+              <p class="prediction-feedback-title">Was this prediction correct?</p>
+              <div class="prediction-feedback-actions">
+                <button type="button" class="btn-primary prediction-feedback-btn" id="prediction-feedback-yes">Yes, accurate</button>
+                <button type="button" class="btn-primary prediction-feedback-btn prediction-feedback-btn-alt" id="prediction-feedback-no">No, inaccurate</button>
+              </div>
+              <div id="prediction-feedback-details" class="prediction-feedback-details" style="display: none;">
+                <label for="prediction-feedback-corrected-verdict" class="prediction-feedback-label">If incorrect, what is the actual label?</label>
+                <select id="prediction-feedback-corrected-verdict" class="auth-input prediction-feedback-select">
+                  <option value="" selected>Prefer not to say</option>
+                  <option value="Real">Real</option>
+                  <option value="Synthetic">Synthetic</option>
+                </select>
+                <label for="prediction-feedback-notes" class="prediction-feedback-label">Notes (optional)</label>
+                <textarea id="prediction-feedback-notes" class="auth-input prediction-feedback-notes" rows="3" placeholder="Tell us what looked wrong..."></textarea>
+                <button type="button" class="btn-gradient prediction-feedback-submit" id="prediction-feedback-submit">Submit feedback</button>
+              </div>
+              <p id="prediction-feedback-status" class="prediction-feedback-status" style="display: none;"></p>
             </div>
           </div>
 
