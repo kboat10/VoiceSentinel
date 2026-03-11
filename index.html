@@ -287,7 +287,11 @@
         <div class="page-content">
           <h1 class="page-title">Voice Lab</h1>
           <p class="page-subtitle">Record or upload audio to scan for deepfakes.</p>
-          <div class="ux-flow-hint"><strong>Quick flow:</strong> 1) Record or upload audio, 2) Review and submit, 3) Check verdict and SentinelScore, 4) Share feedback to improve model quality.</div>
+          <div class="ux-flow-hint"><strong>Quick flow:</strong> Record or upload, review, submit, then confirm whether the verdict looks right.</div>
+          <div class="voice-lab-quick-actions">
+            <button type="button" class="btn-primary voice-lab-quick-btn" id="voice-lab-upload-cta">Upload WAV or MP3</button>
+            <button type="button" class="btn-outline voice-lab-quick-btn" id="voice-lab-history-cta">Open History</button>
+          </div>
 
           <!-- Ready to Scan card -->
           <div class="card record-card">
@@ -334,12 +338,15 @@
               </div>
               <div class="text">
                 <h3>Upload Audio</h3>
-                <p>Click to upload from your device.</p>
+                <p>Choose a file from your device and send it straight to review.</p>
               </div>
             </div>
           </div>
 
-          <h2 class="section-title" id="recent-title" style="display: none;">Recent Recordings</h2>
+          <div class="section-header-inline" id="recent-recordings-header" style="display: none;">
+            <h2 class="section-title" id="recent-title" style="display: block; margin: 0;">Recent Recordings</h2>
+            <span class="section-caption">Your latest reviewed audio clips on this device.</span>
+          </div>
           <div id="recordings-list"></div>
 
           <!-- Record / Pause / Stop controls (like reference) -->
@@ -355,12 +362,6 @@
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
             </button>
           </div>
-
-          <div class="home-actions" style="margin-top: 20px;">
-            <button type="button" class="btn-outline" id="btn-history">
-              View History <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </button>
-          </div>
         </div>
       </section>
 
@@ -368,7 +369,34 @@
       <section id="panel-settings" class="panel">
         <div class="page-content">
           <h1 class="page-title">Settings</h1>
-          <p class="page-subtitle">Appearance, audio, and account.</p>
+          <p class="page-subtitle">Manage your account, app behavior, and exported data from one place.</p>
+
+          <div class="card settings-section settings-overview-card">
+            <div class="card-inner">
+              <div class="settings-overview-header">
+                <div>
+                  <p class="settings-overview-kicker">Account overview</p>
+                  <h3 class="settings-overview-name" id="settings-user-name">Guest user</h3>
+                  <p class="settings-overview-meta" id="settings-user-meta">Sign in to sync history and exports.</p>
+                </div>
+                <div class="settings-overview-badge" id="settings-user-type-badge">Basic</div>
+              </div>
+              <div class="settings-overview-actions">
+                <button type="button" class="btn-primary settings-overview-btn" id="settings-edit-profile">Edit profile</button>
+                <button type="button" class="btn-outline settings-overview-btn" id="settings-about-me">About account</button>
+              </div>
+              <div id="about-me-error" class="auth-error" style="display: none;" role="alert"></div>
+              <div id="about-me-panel" class="about-me-panel" style="display: none;">
+                <div class="about-me-loading" id="about-me-loading">Loading...</div>
+                <div class="about-me-content" id="about-me-content">
+                  <div class="about-me-row"><span class="about-me-label">User ID</span><span class="about-me-value" id="about-me-uid">—</span></div>
+                  <div class="about-me-row"><span class="about-me-label">Email</span><span class="about-me-value" id="about-me-email">—</span></div>
+                  <div class="about-me-row"><span class="about-me-label">User Type</span><span class="about-me-value" id="about-me-level">—</span></div>
+                  <div class="about-me-row"><span class="about-me-label">Member Since</span><span class="about-me-value" id="about-me-created">—</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div class="card settings-section">
             <div class="card-inner">
@@ -385,19 +413,6 @@
                 <span class="label">Dark mode</span>
                 <button type="button" class="toggle" id="toggle-dark" aria-pressed="false"></button>
               </div>
-            </div>
-          </div>
-          <div class="card settings-section">
-            <div class="card-inner">
-              <div class="header">
-                <div class="icon-circle">
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>
-                </div>
-                <div>
-                  <h3 class="title">Audio</h3>
-                  <p class="subtitle">Recording and playback</p>
-                </div>
-              </div>
               <div class="settings-row">
                 <span class="label">Input device</span>
                 <span class="value">Default</span>
@@ -412,42 +427,15 @@
             <div class="card-inner">
               <div class="header">
                 <div class="icon-circle">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 </div>
                 <div>
-                  <h3 class="title">Account</h3>
-                  <p class="subtitle">Profile and data</p>
-                </div>
-              </div>
-              <button type="button" class="settings-tile" id="settings-edit-profile">Edit profile</button>
-              <button type="button" class="settings-tile" id="settings-about-me">About me</button>
-              <div id="about-me-error" class="auth-error" style="display: none;" role="alert"></div>
-              <div id="about-me-panel" class="about-me-panel" style="display: none;">
-                <div class="about-me-loading" id="about-me-loading">Loading...</div>
-                <div class="about-me-content" id="about-me-content">
-                  <div class="about-me-row"><span class="about-me-label">User ID</span><span class="about-me-value" id="about-me-uid">—</span></div>
-                  <div class="about-me-row"><span class="about-me-label">Email</span><span class="about-me-value" id="about-me-email">—</span></div>
-                  <div class="about-me-row"><span class="about-me-label">User Type</span><span class="about-me-value" id="about-me-level">—</span></div>
-                  <div class="about-me-row"><span class="about-me-label">Member Since</span><span class="about-me-value" id="about-me-created">—</span></div>
-                </div>
-              </div>
-              <button type="button" class="settings-tile">Help & support</button>
-              <div id="settings-delete-error" class="auth-error" style="display: none;" role="alert"></div>
-              <button type="button" class="settings-tile settings-tile--danger" id="settings-delete-account">Delete account</button>
-            </div>
-          </div>
-          <div class="card settings-section">
-            <div class="card-inner">
-              <div class="header">
-                <div class="icon-circle">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                </div>
-                <div>
-                  <h3 class="title">Export Data</h3>
-                  <p class="subtitle">Download your analysis results</p>
+                  <h3 class="title">Data Tools</h3>
+                  <p class="subtitle">Exports, service status, and cleanup</p>
                 </div>
               </div>
               <button type="button" class="settings-tile" id="settings-export-data">Export data</button>
+              <button type="button" class="settings-tile" id="settings-view-stats">View system status</button>
               <div id="export-panel" style="display: none;">
                 <p style="color: var(--grey-700); font-size: 13px; margin: 0 0 12px;">Choose an export format:</p>
                 <div class="export-buttons">
@@ -464,6 +452,10 @@
                 <div id="export-loading" class="history-loading" style="display: none;">Exporting…</div>
                 <div id="export-success" class="export-success" style="display: none;"></div>
               </div>
+              <div id="settings-stats-error" class="auth-error" style="display: none;" role="alert"></div>
+              <pre id="settings-stats-output" class="settings-stats-output" style="display: none;"></pre>
+              <div id="settings-delete-error" class="auth-error" style="display: none;" role="alert"></div>
+              <button type="button" class="settings-tile settings-tile--danger" id="settings-delete-account">Delete account</button>
             </div>
           </div>
           <p class="settings-version">Voice Sentinel v1.0</p>
@@ -556,6 +548,15 @@
           <h1 class="page-title">Audio Breakdown</h1>
           <p class="page-subtitle">See the verdict and explore the forensic details of your audio.</p>
           <div class="ux-flow-hint"><strong>SentinelScore:</strong> Confidence is shown as a percentage estimate, not a certainty.</div>
+          <div id="breakdown-empty-state" class="card breakdown-empty-state">
+            <div class="card-inner placeholder-card">
+              <div class="icon-circle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-6"/></svg>
+              </div>
+              <h3>No analysis selected</h3>
+              <p>Run a scan in Voice Lab, open one from History, or fetch a sample below to start exploring the forensic details.</p>
+            </div>
+          </div>
 
           <!-- Verdict snapshot card — always visible after analysis -->
           <div id="prediction-result" class="verdict-snapshot" style="display: none;">
@@ -606,32 +607,30 @@
             </div>
           </div>
 
-          <!-- Authenticated: pick from your samples -->
-          <div class="sample-lookup-card" id="sample-picker-section">
-            <h3 class="prediction-title">Your Sample Analysis</h3>
-            <p style="color: var(--grey-500); font-size: 13px; margin: 0 0 12px;">Select one of your samples to view its full forensic details.</p>
-            <div class="sample-lookup-row">
-              <select id="sample-picker-select" class="auth-input">
-                <option value="" disabled selected>Select a sample…</option>
-              </select>
-              <button type="button" class="btn-gradient" id="sample-picker-btn" style="width:auto;min-width:130px;height:44px;font-size:14px;">View</button>
+          <div class="breakdown-tools-grid">
+            <!-- Authenticated: pick from your samples -->
+            <div class="sample-lookup-card" id="sample-picker-section">
+              <h3 class="prediction-title">My Samples</h3>
+              <p class="sample-lookup-copy">Choose from samples already attached to your account.</p>
+              <div class="sample-lookup-row">
+                <select id="sample-picker-select" class="auth-input">
+                  <option value="" disabled selected>Select a sample…</option>
+                </select>
+                <button type="button" class="btn-gradient compact-action-btn" id="sample-picker-btn">Open</button>
+              </div>
+              <div id="sample-picker-error" class="auth-error" style="display: none;" role="alert"></div>
             </div>
-            <div id="sample-picker-error" class="auth-error" style="display: none;" role="alert"></div>
-            <div id="sample-picker-loading" class="history-loading" style="display: none;">Fetching analysis…</div>
-            <div id="sample-picker-result" style="display: none;"></div>
-          </div>
 
-          <!-- Manual sample lookup (no account needed) -->
-          <div class="sample-lookup-card">
-            <h3 class="prediction-title">Look Up by Sample ID</h3>
-            <p style="color: var(--grey-500); font-size: 13px; margin: 0 0 12px;">Enter any sample ID to retrieve its analysis — no account needed.</p>
-            <div class="sample-lookup-row">
-              <input type="number" id="lookup-sample-id" class="auth-input" placeholder="e.g. 56" min="1" />
-              <button type="button" class="btn-gradient" id="lookup-sample-btn" style="width:auto;min-width:130px;height:44px;font-size:14px;">Get Analysis</button>
+            <!-- Manual sample lookup (no account needed) -->
+            <div class="sample-lookup-card">
+              <h3 class="prediction-title">Open by Sample ID</h3>
+              <p class="sample-lookup-copy">Fetch any sample directly when you already know its ID.</p>
+              <div class="sample-lookup-row">
+                <input type="number" id="lookup-sample-id" class="auth-input" placeholder="e.g. 56" min="1" />
+                <button type="button" class="btn-gradient compact-action-btn" id="lookup-sample-btn">Fetch</button>
+              </div>
+              <div id="lookup-error" class="auth-error" style="display: none;" role="alert"></div>
             </div>
-            <div id="lookup-error" class="auth-error" style="display: none;" role="alert"></div>
-            <div id="lookup-loading" class="history-loading" style="display: none;">Fetching analysis…</div>
-            <div id="lookup-result" style="display: none;"></div>
           </div>
         </div>
       </section>
@@ -640,26 +639,42 @@
       <section id="panel-history" class="panel">
         <div class="page-content form-page">
           <h1 class="page-title">History</h1>
-          <p class="page-subtitle">Your analysis history and saved samples.</p>
-          <div class="ux-flow-hint"><strong>Reminder:</strong> Historical verdicts can change as models improve. Re-run analysis for critical cases.</div>
-          <button type="button" class="btn-primary" id="btn-load-history" style="margin-bottom: 16px;">Load history from server</button>
+          <p class="page-subtitle">A compact view of your recent samples and server-side analysis history.</p>
+          <div class="history-toolbar">
+            <div class="history-summary" id="history-summary">
+              <div class="history-stat">
+                <span class="history-stat-value" id="history-local-count">0</span>
+                <span class="history-stat-label">Saved locally</span>
+              </div>
+              <div class="history-stat">
+                <span class="history-stat-value" id="history-server-count">0</span>
+                <span class="history-stat-label">On server</span>
+              </div>
+            </div>
+            <div class="history-actions">
+              <button type="button" class="btn-primary history-action-btn" id="history-refresh-btn">Refresh</button>
+              <button type="button" class="settings-tile settings-tile--danger history-clear-btn" id="clear-history-btn" style="display: none;">Clear all</button>
+            </div>
+          </div>
           <!-- Local sample history -->
-          <div id="local-samples-section" style="display: none;">
-            <h3 style="font-size: 16px; font-weight: 600; margin: 24px 0 12px; color: var(--dark-text);">Your Samples</h3>
+          <div id="local-samples-section" class="history-block" style="display: none;">
+            <div class="history-block-header">
+              <h3>Your Samples</h3>
+              <span class="history-block-caption">Quick access to recently analyzed files saved on this device.</span>
+            </div>
             <div id="local-samples-list" class="history-list"></div>
           </div>
           <div id="history-error" class="auth-error" style="display: none;" role="alert"></div>
           <div id="history-loading" class="history-loading" style="display: none;">Loading history…</div>
-          <div id="history-list" class="history-list" style="display: none;"></div>
+          <div id="history-list" class="history-list history-block" style="display: none;"></div>
           <div id="clear-history-error" class="auth-error" style="display: none;" role="alert"></div>
-          <button type="button" class="settings-tile settings-tile--danger" id="clear-history-btn" style="display: none; margin-top: 12px;">Clear all history</button>
           <div class="card" id="history-placeholder-card">
             <div class="card-inner placeholder-card">
               <div class="icon-circle">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               </div>
-              <h3>No history yet</h3>
-              <p>Click <strong>Load history from server</strong> above, or record/upload audio to see your analysis entries here.</p>
+              <h3>No analysis history yet</h3>
+              <p>Run a scan in Voice Lab and your recent samples and server history will appear here automatically.</p>
             </div>
           </div>
         </div>

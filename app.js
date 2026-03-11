@@ -14,6 +14,8 @@ const API_BASE =
 const AUTH_TOKEN_KEY = 'voiceSentinelToken';
 const USER_ID_KEY = 'voiceSentinelUserId';
 const USER_EMAIL_KEY = 'voiceSentinelEmail';
+const USER_NAME_STORAGE_KEY = 'voiceSentinelUserName';
+const EDIT_PROFILE_STORAGE_KEY = 'voiceSentinelUserType';
 const SAMPLES_STORAGE_KEY = 'voiceSentinelSamples';
 const RECORDING_INPUT_TYPE_KEY = 'recording_input_type';
 const PREDICTION_FEEDBACK_ENDPOINT = 'forensics/feedback';
@@ -69,6 +71,14 @@ function getStoredEmail() {
   try { return localStorage.getItem(USER_EMAIL_KEY); } catch { return null; }
 }
 
+function getStoredUserName() {
+  try { return localStorage.getItem(USER_NAME_STORAGE_KEY); } catch { return null; }
+}
+
+function getStoredUserType() {
+  try { return localStorage.getItem(EDIT_PROFILE_STORAGE_KEY); } catch { return null; }
+}
+
 /** Persist user id and email to localStorage + state. */
 function storeUserIdentity(id, email) {
   if (id != null) {
@@ -88,6 +98,7 @@ function clearAuthToken() {
     localStorage.removeItem(USER_EMAIL_KEY);
   } catch (_) {}
   state.userId = null;
+  updateUserSurface();
 }
 
 /**
@@ -180,6 +191,36 @@ function getPredictionConfidence(obj) {
   return Number.isFinite(num) ? num : null;
 }
 
+function updateUserSurface() {
+  const name = getStoredUserName();
+  const email = getStoredEmail();
+  const userType = getStoredUserType() || 'BASIC';
+  const isAuthenticated = !!getAuthToken();
+
+  const greetEl = document.getElementById('home-greeting');
+  if (greetEl) greetEl.textContent = isAuthenticated && name ? `Welcome back, ${name}` : 'Welcome back';
+
+  const settingsName = document.getElementById('settings-user-name');
+  const settingsMeta = document.getElementById('settings-user-meta');
+  const settingsBadge = document.getElementById('settings-user-type-badge');
+  if (settingsName) settingsName.textContent = isAuthenticated ? (name || email || 'Signed-in user') : 'Guest user';
+  if (settingsMeta) settingsMeta.textContent = isAuthenticated ? (email || 'History and exports are linked to your account.') : 'Sign in to sync history and exports.';
+  if (settingsBadge) settingsBadge.textContent = userType.charAt(0) + userType.slice(1).toLowerCase();
+}
+
+function updateVoiceLabSummary() {
+  const header = document.getElementById('recent-recordings-header');
+  const titleEl = document.getElementById('recent-title');
+  const count = state.recordings.length;
+  if (header) header.style.display = count > 0 ? 'flex' : 'none';
+  if (titleEl) titleEl.textContent = count > 0 ? `Recent Recordings (${count})` : 'Recent Recordings';
+}
+
+function setBreakdownEmptyState(isVisible) {
+  const emptyState = document.getElementById('breakdown-empty-state');
+  if (emptyState) emptyState.style.display = isVisible ? '' : 'none';
+}
+
 // --- DOM ---
 const welcomeScreen = document.getElementById('screen-welcome');
 const appShell = document.getElementById('app-shell');
@@ -242,6 +283,7 @@ function navTo(path) {
     return;
   }
   showPanel(path);
+  if (path === 'history') loadHistoryFromServer();
 }
 
 function injectGlobalDisclaimers() {
@@ -282,11 +324,7 @@ if (getAuthToken()) {
   loadRecordings();
   renderRecordings();
   enterApp();
-  {
-    const name = localStorage.getItem('voiceSentinelUserName');
-    const greetEl = document.getElementById('home-greeting');
-    if (greetEl && name) greetEl.textContent = 'Welcome back, ' + name;
-  }
+  updateUserSurface();
   (async () => {
     try {
       const uid = state.userId ?? getStoredUserId();
@@ -418,6 +456,7 @@ async function handleRegister() {
       setAuthMode(true);
       const passwordConfirmEl = document.getElementById('auth-password-confirm');
       if (passwordConfirmEl) passwordConfirmEl.value = '';
+      updateUserSurface();
       alert('Registration successful. Please sign in with your new account.');
       return;
     }
@@ -506,11 +545,7 @@ async function handleLogin() {
         storeUserIdentity(data, email);
       }
       enterApp();
-      {
-        const name = localStorage.getItem('voiceSentinelUserName');
-        const greetEl = document.getElementById('home-greeting');
-        if (greetEl && name) greetEl.textContent = 'Welcome back, ' + name;
-      }
+      updateUserSurface();
       return;
     }
 
@@ -596,6 +631,7 @@ document.getElementById('change-user-save')?.addEventListener('click', async () 
     const text = await res.text();
     if (res.ok) {
       try { localStorage.setItem('voiceSentinelUserType', level); } catch (_) {}
+      updateUserSurface();
       navTo('home');
     } else {
       if (errorEl) {
@@ -614,9 +650,6 @@ document.getElementById('change-user-save')?.addEventListener('click', async () 
 });
 
 // --- Edit profile modal (Settings) ---
-const EDIT_PROFILE_STORAGE_KEY = 'voiceSentinelUserType';
-/** Name is stored in localStorage only; never sent to register, login, or any other API. Updated on sign-up and when user changes it in Edit profile. */
-const USER_NAME_STORAGE_KEY = 'voiceSentinelUserName';
 /** Initial user type when the edit profile modal was opened; used to detect level change. */
 let editProfileInitialLevel = null;
 /** Initial name when the edit profile modal was opened; used to detect name change. */
@@ -744,6 +777,7 @@ async function handleEditProfileSave() {
   // Name: stored locally only; never sent to change-password or user/update APIs. When user updates name, we only update the stored version here.
   if (wantNameChange) {
     try { localStorage.setItem(USER_NAME_STORAGE_KEY, name); } catch (_) {}
+    updateUserSurface();
   }
 
   // Password: require current password only when user is actually changing password.
@@ -804,6 +838,7 @@ async function handleEditProfileSave() {
       if (res.ok) {
         try { localStorage.setItem(EDIT_PROFILE_STORAGE_KEY, level); } catch (_) {}
         if (changeUserSelect) changeUserSelect.value = level;
+        updateUserSurface();
       } else {
         const text = await res.text();
         showEditProfileError(parseApiError(res, text));
@@ -1868,7 +1903,8 @@ function populateSamplePicker(historyData) {
   });
 }
 
-function showPredictionResult(data) {
+function showPredictionResult(data, options = {}) {
+  const { promptFeedback = true } = options;
   const card = document.getElementById('prediction-result');
   if (!card) return;
 
@@ -1911,6 +1947,7 @@ function showPredictionResult(data) {
   resetPredictionFeedbackUI();
 
   card.style.display = '';
+  setBreakdownEmptyState(false);
 
   const detailCard = document.getElementById('analysis-detail');
   const detailBody = document.getElementById('analysis-detail-body');
@@ -1931,9 +1968,11 @@ function showPredictionResult(data) {
     analysisCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
-  setTimeout(() => {
-    openMandatoryFeedbackModal();
-  }, 120);
+  if (promptFeedback) {
+    setTimeout(() => {
+      openMandatoryFeedbackModal();
+    }, 120);
+  }
 }
 
 function setPredictionFeedbackStatus(message, isError) {
@@ -2160,9 +2199,9 @@ async function openMandatoryFeedbackModal() {
 function renderLocalSamples() {
   const section = document.getElementById('local-samples-section');
   const listEl = document.getElementById('local-samples-list');
-  if (!section || !listEl) return;
+  if (!section || !listEl) return 0;
   const samples = getSavedSamples();
-  if (samples.length === 0) { section.style.display = 'none'; return; }
+  if (samples.length === 0) { section.style.display = 'none'; return 0; }
   section.style.display = '';
   listEl.innerHTML = '';
   samples.forEach((s) => {
@@ -2179,9 +2218,52 @@ function renderLocalSamples() {
       `<span>SentinelScore: ${escapeHtml(confStr)}</span>` +
       `<span>${escapeHtml(s.source === 'upload' ? 'Uploaded' : 'Recorded')}</span>` +
       (s.sample_id ? `<span>ID: ${escapeHtml(String(s.sample_id))}</span>` : '') +
-      `</div>`;
+      `</div>` +
+      (s.sample_id ? `<div class="history-entry-actions"><button type="button" class="btn-primary history-open-btn">Open analysis</button></div>` : '');
+    el.querySelector('.history-open-btn')?.addEventListener('click', () => openSampleBreakdown(s.sample_id, s.verdict));
     listEl.appendChild(el);
   });
+  return samples.length;
+}
+
+function updateHistorySummary(localCount, serverCount) {
+  const localEl = document.getElementById('history-local-count');
+  const serverEl = document.getElementById('history-server-count');
+  if (localEl) localEl.textContent = String(localCount ?? 0);
+  if (serverEl) serverEl.textContent = String(serverCount ?? 0);
+}
+
+async function openSampleBreakdown(sampleId, verdict) {
+  if (sampleId == null) return;
+  navTo('audio-breakdown');
+  const analysisOpts = {
+    loadingEl: document.getElementById('analysis-detail-loading'),
+    errorEl: document.getElementById('analysis-detail-error'),
+    contentEl: document.getElementById('analysis-detail-content'),
+    cardEl: document.getElementById('analysis-detail'),
+  };
+  const userId = state.userId ?? getStoredUserId();
+  let data = null;
+  if (userId != null) {
+    data = await fetchSampleAnalysis(sampleId, userId, analysisOpts);
+  } else {
+    data = await fetchAnalysis(sampleId, analysisOpts);
+  }
+  if (data && typeof data === 'object') showPredictionResult(data, { promptFeedback: false });
+  else showPredictionResult({ sample_id: sampleId, verdict }, { promptFeedback: false });
+}
+
+async function openPublicSampleBreakdown(sampleId) {
+  if (!sampleId) return;
+  navTo('audio-breakdown');
+  const analysisOpts = {
+    loadingEl: document.getElementById('analysis-detail-loading'),
+    errorEl: document.getElementById('analysis-detail-error'),
+    contentEl: document.getElementById('analysis-detail-content'),
+    cardEl: document.getElementById('analysis-detail'),
+  };
+  const data = await fetchAnalysis(sampleId, analysisOpts);
+  if (data && typeof data === 'object') showPredictionResult(data, { promptFeedback: false });
 }
 
 async function submitRecordingFromReview() {
@@ -2333,6 +2415,12 @@ const uploadAudioInput = document.getElementById('upload-audio-input');
 document.getElementById('upload-card')?.addEventListener('click', () => {
   uploadAudioInput?.click();
 });
+document.getElementById('voice-lab-upload-cta')?.addEventListener('click', () => {
+  uploadAudioInput?.click();
+});
+document.getElementById('voice-lab-history-cta')?.addEventListener('click', () => {
+  navTo('history');
+});
 document.getElementById('upload-card')?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();
@@ -2377,14 +2465,13 @@ function loadRecordings() {
 // --- Home: Recordings list ---
 function renderRecordings() {
   const container = document.getElementById('recordings-list');
-  const titleEl = document.getElementById('recent-title');
   if (!container) return;
   container.innerHTML = '';
   if (state.recordings.length === 0) {
-    if (titleEl) titleEl.style.display = 'none';
+    updateVoiceLabSummary();
     return;
   }
-  if (titleEl) titleEl.style.display = 'block';
+  updateVoiceLabSummary();
   state.recordings.forEach((rec, index) => {
     const tile = document.createElement('div');
     tile.className = 'card';
@@ -2586,7 +2673,9 @@ function renderHistoryEntry(item) {
         `<span>Sample ID: ${escapeHtml(String(sampleId))}</span>` +
         (dateStr ? `<span>${escapeHtml(dateStr)}</span>` : '') +
       `</div>` +
+      (item.sample_id != null ? `<div class="history-entry-actions"><button type="button" class="btn-primary history-open-btn">Open analysis</button></div>` : '') +
     `</div>`;
+  el.querySelector('.history-open-btn')?.addEventListener('click', () => openSampleBreakdown(item.sample_id, item.verdict));
   return el;
 }
 
@@ -2595,10 +2684,11 @@ async function loadHistoryFromServer() {
   const errorEl = document.getElementById('history-error');
   const loadingEl = document.getElementById('history-loading');
   const placeholderCard = document.getElementById('history-placeholder-card');
+  const localCount = renderLocalSamples();
+  updateHistorySummary(localCount, 0);
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
   if (listEl) listEl.style.display = 'none';
   if (placeholderCard) placeholderCard.style.display = 'none';
-  renderLocalSamples();
   if (loadingEl) { loadingEl.style.display = 'block'; loadingEl.textContent = 'Loading history…'; }
 
   const userId = state.userId ?? getStoredUserId();
@@ -2625,21 +2715,26 @@ async function loadHistoryFromServer() {
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
     const clearBtn = document.getElementById('clear-history-btn');
     let hasEntries = false;
+    let serverCount = 0;
     if (listEl) {
       listEl.innerHTML = '';
       if (Array.isArray(data) && data.length > 0) {
         data.forEach((item) => listEl.appendChild(renderHistoryEntry(item)));
         hasEntries = true;
+        serverCount = data.length;
       } else if (Array.isArray(data)) {
         listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>No history yet. Record or upload audio and submit to see entries here.</p></div></div>';
       } else if (data !== null && data !== '') {
         listEl.appendChild(renderHistoryEntry(data));
         hasEntries = true;
+        serverCount = 1;
       } else {
         listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>No history yet. Record or upload audio and submit to see entries here.</p></div></div>';
       }
       listEl.style.display = 'block';
+      listEl.classList.toggle('history-list-empty', !hasEntries);
     }
+    updateHistorySummary(localCount, serverCount);
     if (clearBtn) clearBtn.style.display = hasEntries ? '' : 'none';
     if (placeholderCard) placeholderCard.style.display = 'none';
     populateSamplePicker(Array.isArray(data) ? data : []);
@@ -2653,12 +2748,7 @@ async function loadHistoryFromServer() {
   }
 }
 
-document.getElementById('btn-history')?.addEventListener('click', () => {
-  navTo('history');
-  loadHistoryFromServer();
-});
-
-document.getElementById('btn-load-history')?.addEventListener('click', () => {
+document.getElementById('history-refresh-btn')?.addEventListener('click', () => {
   loadHistoryFromServer();
 });
 
@@ -2690,6 +2780,7 @@ document.getElementById('clear-history-btn')?.addEventListener('click', async ()
         listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>History cleared. Record or upload audio to see entries here.</p></div></div>';
         listEl.style.display = 'block';
       }
+      updateHistorySummary(renderLocalSamples(), 0);
       if (btn) btn.style.display = 'none';
     } else {
       if (errorEl) { errorEl.textContent = parseApiError(res, text); errorEl.style.display = 'block'; }
@@ -2714,12 +2805,9 @@ document.getElementById('analysis-detail-toggle')?.addEventListener('click', () 
 document.getElementById('sample-picker-btn')?.addEventListener('click', async () => {
   const select = document.getElementById('sample-picker-select');
   const errorEl = document.getElementById('sample-picker-error');
-  const loadingEl = document.getElementById('sample-picker-loading');
-  const resultEl = document.getElementById('sample-picker-result');
   const btn = document.getElementById('sample-picker-btn');
 
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
-  if (resultEl) { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }
 
   const sampleId = select?.value;
   if (!sampleId) {
@@ -2734,13 +2822,7 @@ document.getElementById('sample-picker-btn')?.addEventListener('click', async ()
   }
 
   if (btn) btn.disabled = true;
-  const data = await fetchSampleAnalysis(sampleId, userId, {
-    loadingEl,
-    errorEl,
-    contentEl: resultEl,
-    cardEl: null,
-  });
-  if (resultEl && data != null) resultEl.style.display = '';
+  await openSampleBreakdown(sampleId);
   if (btn) btn.disabled = false;
 });
 
@@ -2748,12 +2830,9 @@ document.getElementById('sample-picker-btn')?.addEventListener('click', async ()
 document.getElementById('lookup-sample-btn')?.addEventListener('click', async () => {
   const input = document.getElementById('lookup-sample-id');
   const errorEl = document.getElementById('lookup-error');
-  const loadingEl = document.getElementById('lookup-loading');
-  const resultEl = document.getElementById('lookup-result');
   const btn = document.getElementById('lookup-sample-btn');
 
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
-  if (resultEl) { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }
 
   const sampleId = input?.value?.trim();
   if (!sampleId) {
@@ -2762,13 +2841,7 @@ document.getElementById('lookup-sample-btn')?.addEventListener('click', async ()
   }
 
   if (btn) btn.disabled = true;
-  const data = await fetchAnalysis(sampleId, {
-    loadingEl,
-    errorEl,
-    contentEl: resultEl,
-    cardEl: null,
-  });
-  if (resultEl && data != null) resultEl.style.display = '';
+  await openPublicSampleBreakdown(sampleId);
   if (btn) btn.disabled = false;
 });
 
@@ -2785,3 +2858,7 @@ document.getElementById('prediction-feedback-no')?.addEventListener('click', () 
 document.getElementById('prediction-feedback-submit')?.addEventListener('click', () => {
   submitPredictionFeedback('incorrect');
 });
+
+updateUserSurface();
+updateVoiceLabSummary();
+setBreakdownEmptyState(true);
