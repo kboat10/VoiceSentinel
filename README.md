@@ -81,6 +81,9 @@ M4A is not supported.
 
 After a prediction is shown in Audio Breakdown, the UI asks the user to vote on whether the prediction was correct.
 
+- The feedback prompt is shown as a modal popup immediately after prediction.
+- The confidence percentage is displayed to users as **SentinelScore**.
+
 `POST /forensics/feedback` sends JSON:
 
 - `sample_id`

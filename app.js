@@ -160,9 +160,17 @@ const state = {
   currentLiveInputType: null,
   /** Current prediction context used when collecting user vote/feedback. */
   predictionFeedbackContext: null,
+  /** Tracks samples already voted on to avoid repeat prompts in one session. */
+  feedbackSubmittedSamples: {},
+  /** Prevents opening duplicate feedback modals. */
+  feedbackPromptActive: false,
   /** User id from GET /user/me (for forensics API). */
   userId: null,
 };
+
+function formatSentinelScore(confidence) {
+  return confidence != null ? `${(confidence * 100).toFixed(1)}%` : '—';
+}
 
 // --- DOM ---
 const welcomeScreen = document.getElementById('screen-welcome');
@@ -227,6 +235,23 @@ function navTo(path) {
   }
   showPanel(path);
 }
+
+function injectGlobalDisclaimers() {
+  document.querySelectorAll('.page-content').forEach((content) => {
+    if (!content || content.querySelector('.panel-disclaimer')) return;
+    const firstSubtitle = content.querySelector('.page-subtitle');
+    const note = document.createElement('div');
+    note.className = 'panel-disclaimer';
+    note.innerHTML = '<strong>Disclaimer:</strong> Voice Sentinel provides probabilistic AI analysis. Always verify critical decisions with independent evidence.';
+    if (firstSubtitle && firstSubtitle.parentNode === content) {
+      firstSubtitle.insertAdjacentElement('afterend', note);
+    } else {
+      content.insertBefore(note, content.firstChild);
+    }
+  });
+}
+
+injectGlobalDisclaimers();
 
 // --- Sidebar nav ---
 document.querySelectorAll('.sidebar-nav .nav-item[data-nav]').forEach((btn) => {
@@ -1858,7 +1883,7 @@ function showPredictionResult(data) {
   else if (isSynthetic) verdictEl.classList.add('verdict-label--synthetic');
 
   const confEl = document.getElementById('pred-confidence');
-  confEl.textContent = data.confidence != null ? `${(data.confidence * 100).toFixed(1)}% confidence` : '';
+  confEl.textContent = `SentinelScore: ${formatSentinelScore(data.confidence)}`;
 
   document.getElementById('pred-sample-id').textContent = data.sample_id ?? '—';
 
@@ -1889,6 +1914,10 @@ function showPredictionResult(data) {
     detailBody.classList.add('breakdown-collapsed');
     if (detailToggle) detailToggle.classList.remove('open');
   }
+
+  setTimeout(() => {
+    openMandatoryFeedbackModal();
+  }, 120);
 }
 
 function setPredictionFeedbackStatus(message, isError) {
@@ -1914,7 +1943,7 @@ function resetPredictionFeedbackUI() {
   const submitBtn = document.getElementById('prediction-feedback-submit');
   const yesBtn = document.getElementById('prediction-feedback-yes');
   const noBtn = document.getElementById('prediction-feedback-no');
-  if (box) box.style.display = '';
+  if (box) box.style.display = 'none';
   if (details) details.style.display = 'none';
   if (notesEl) notesEl.value = '';
   if (correctedVerdictEl) correctedVerdictEl.value = '';
@@ -1984,6 +2013,134 @@ async function submitPredictionFeedback(vote) {
   }
 }
 
+async function sendPredictionFeedback(vote, correctedVerdict, notes) {
+  const ctx = state.predictionFeedbackContext;
+  if (!ctx || ctx.sample_id == null) {
+    return { ok: false, message: 'No sample is available for feedback yet.' };
+  }
+
+  const userId = state.userId ?? getStoredUserId();
+  const payload = {
+    sample_id: ctx.sample_id,
+    user_id: userId,
+    vote,
+    predicted_verdict: ctx.predicted_verdict,
+    predicted_confidence: ctx.predicted_confidence,
+    corrected_verdict: correctedVerdict || null,
+    feedback_notes: notes || null,
+    recording_input_type: ctx.recording_input_type,
+  };
+
+  try {
+    const res = await apiFetch(PREDICTION_FEEDBACK_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      return { ok: false, message: parseApiError(res, text) };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: formatNetworkError(err) };
+  }
+}
+
+async function openMandatoryFeedbackModal() {
+  const ctx = state.predictionFeedbackContext;
+  if (!ctx || ctx.sample_id == null) return;
+  if (state.feedbackSubmittedSamples[String(ctx.sample_id)]) return;
+  if (state.feedbackPromptActive) return;
+
+  // Fallback keeps existing inline controls available if SweetAlert is not loaded.
+  if (typeof window.Swal === 'undefined') {
+    const box = document.getElementById('prediction-feedback');
+    if (box) box.style.display = '';
+    return;
+  }
+
+  state.feedbackPromptActive = true;
+  try {
+    let submitted = false;
+    while (!submitted) {
+      const first = await window.Swal.fire({
+        title: 'Help Improve Voice Sentinel',
+        html: '<p style="margin:0;color:#64748b;">Was this prediction correct?</p>',
+        icon: 'question',
+        showDenyButton: true,
+        confirmButtonText: 'Yes, accurate',
+        denyButtonText: 'No, inaccurate',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showCloseButton: false,
+      });
+
+      if (first.isConfirmed) {
+        const result = await sendPredictionFeedback('correct', null, null);
+        if (result.ok) {
+          submitted = true;
+          break;
+        }
+        await window.Swal.fire({
+          icon: 'error',
+          title: 'Feedback not submitted',
+          text: result.message || 'Please try again.',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          confirmButtonText: 'Retry',
+        });
+        continue;
+      }
+
+      if (first.isDenied) {
+        const second = await window.Swal.fire({
+          title: 'What should it be?',
+          html:
+            '<label for="swal-corrected" style="display:block;text-align:left;font-size:12px;color:#64748b;margin-bottom:6px;">Correct label (optional)</label>' +
+            '<select id="swal-corrected" class="swal2-input" style="margin:0 0 10px;max-width:100%;height:42px;">' +
+            '<option value="">Prefer not to say</option>' +
+            '<option value="Real">Real</option>' +
+            '<option value="Synthetic">Synthetic</option>' +
+            '</select>' +
+            '<label for="swal-notes" style="display:block;text-align:left;font-size:12px;color:#64748b;margin-bottom:6px;">Notes (optional)</label>' +
+            '<textarea id="swal-notes" class="swal2-textarea" placeholder="What looked wrong?" style="margin:0;max-width:100%;"></textarea>',
+          focusConfirm: false,
+          showCancelButton: false,
+          confirmButtonText: 'Submit feedback',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          preConfirm: async () => {
+            const correctedVerdict = document.getElementById('swal-corrected')?.value || null;
+            const notes = document.getElementById('swal-notes')?.value?.trim() || null;
+            const result = await sendPredictionFeedback('incorrect', correctedVerdict, notes);
+            if (!result.ok) {
+              window.Swal.showValidationMessage(result.message || 'Submission failed. Please try again.');
+              return false;
+            }
+            return true;
+          },
+        });
+        if (second.isConfirmed) {
+          submitted = true;
+          break;
+        }
+      }
+    }
+
+    state.feedbackSubmittedSamples[String(ctx.sample_id)] = true;
+    await window.Swal.fire({
+      icon: 'success',
+      title: 'Thanks for voting',
+      text: 'Your feedback helps improve model quality.',
+      timer: 1300,
+      showConfirmButton: false,
+    });
+  } finally {
+    state.feedbackPromptActive = false;
+  }
+}
+
 function renderLocalSamples() {
   const section = document.getElementById('local-samples-section');
   const listEl = document.getElementById('local-samples-list');
@@ -2002,7 +2159,7 @@ function renderLocalSamples() {
       `<div class="local-sample-header"><span class="local-sample-name">${escapeHtml(s.filename || '—')}</span><span class="local-sample-date">${escapeHtml(dateStr)}</span></div>` +
       `<div class="local-sample-details">` +
       `<span class="local-sample-verdict ${verdictClass}">${escapeHtml(s.verdict || '—')}</span>` +
-      `<span>Confidence: ${escapeHtml(confStr)}</span>` +
+      `<span>SentinelScore: ${escapeHtml(confStr)}</span>` +
       `<span>${escapeHtml(s.source === 'upload' ? 'Uploaded' : 'Recorded')}</span>` +
       (s.sample_id ? `<span>ID: ${escapeHtml(String(s.sample_id))}</span>` : '') +
       `</div>`;
@@ -2058,7 +2215,7 @@ async function submitRecordingFromReview() {
 
       if (transcriptionEl) {
         transcriptionEl.textContent = verdict
-          ? `Verdict: ${verdict}` + (confidence != null ? ` (confidence: ${(confidence * 100).toFixed(1)}%)` : '')
+          ? `Verdict: ${verdict}` + (confidence != null ? ` (SentinelScore: ${formatSentinelScore(confidence)})` : '')
           : 'Analysis complete.';
       }
 
@@ -2405,7 +2562,7 @@ function renderHistoryEntry(item) {
     `<div class="card-inner history-entry-card">` +
       `<div class="history-entry-header">` +
         `<span class="history-entry-verdict ${verdictClass}">${escapeHtml(String(verdict))}</span>` +
-        `<span class="history-entry-conf">Confidence: ${escapeHtml(confStr)}</span>` +
+        `<span class="history-entry-conf">SentinelScore: ${escapeHtml(confStr)}</span>` +
       `</div>` +
       `<div class="history-entry-details">` +
         `<span>Sample ID: ${escapeHtml(String(sampleId))}</span>` +

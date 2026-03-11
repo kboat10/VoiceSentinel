@@ -112,6 +112,7 @@
                 Skip & Continue <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               </button>
             </div>
+            <p class="welcome-disclaimer">Disclaimer: Results are AI-generated probability estimates and should not be treated as legal or forensic proof on their own.</p>
           </div>
           <div id="auth-content" style="display: none;" class="auth-form">
             <div class="logo-placeholder logo-img-wrap auth-logo" style="margin-bottom: 20px;">
@@ -212,6 +213,9 @@
       </div>
     </aside>
     <div class="main-content">
+      <div class="global-disclaimer" role="note">
+        <strong>Trust Notice:</strong> Voice Sentinel provides probabilistic analysis. Always combine SentinelScore results with external evidence for high-stakes decisions.
+      </div>
       <!-- Home panel -->
       <section id="panel-home" class="panel active">
         <div class="page-content">
@@ -283,6 +287,7 @@
         <div class="page-content">
           <h1 class="page-title">Voice Lab</h1>
           <p class="page-subtitle">Record or upload audio to scan for deepfakes.</p>
+          <div class="ux-flow-hint"><strong>Quick flow:</strong> 1) Record or upload audio, 2) Review and submit, 3) Check verdict and SentinelScore, 4) Share feedback to improve model quality.</div>
 
           <!-- Ready to Scan card -->
           <div class="card record-card">
@@ -493,6 +498,7 @@
         <div class="page-content form-page">
           <h1 class="page-title">Comparative Analysis</h1>
           <p class="page-subtitle">Upload two audio samples and compare their analysis results side by side.</p>
+          <div class="ux-flow-hint"><strong>Tip:</strong> Compare clips recorded in similar environments for the most meaningful side-by-side interpretation.</div>
 
           <div class="compare-uploads">
             <!-- Sample 1 -->
@@ -549,6 +555,7 @@
         <div class="page-content form-page">
           <h1 class="page-title">Audio Breakdown</h1>
           <p class="page-subtitle">See the verdict and explore the forensic details of your audio.</p>
+          <div class="ux-flow-hint"><strong>SentinelScore:</strong> Confidence is shown as a percentage estimate, not a certainty.</div>
 
           <!-- Verdict snapshot card — always visible after analysis -->
           <div id="prediction-result" class="verdict-snapshot" style="display: none;">
@@ -634,6 +641,7 @@
         <div class="page-content form-page">
           <h1 class="page-title">History</h1>
           <p class="page-subtitle">Your analysis history and saved samples.</p>
+          <div class="ux-flow-hint"><strong>Reminder:</strong> Historical verdicts can change as models improve. Re-run analysis for critical cases.</div>
           <button type="button" class="btn-primary" id="btn-load-history" style="margin-bottom: 16px;">Load history from server</button>
           <!-- Local sample history -->
           <div id="local-samples-section" style="display: none;">
@@ -683,6 +691,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="app.js"></script>
 </body>
 </html>
