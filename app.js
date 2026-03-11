@@ -172,6 +172,14 @@ function formatSentinelScore(confidence) {
   return confidence != null ? `${(confidence * 100).toFixed(1)}%` : '—';
 }
 
+function getPredictionConfidence(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  const raw = obj.confidence ?? obj.confidence_score ?? obj.confidenceScore;
+  if (raw == null || raw === '') return null;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : null;
+}
+
 // --- DOM ---
 const welcomeScreen = document.getElementById('screen-welcome');
 const appShell = document.getElementById('app-shell');
@@ -1882,8 +1890,9 @@ function showPredictionResult(data) {
   if (isReal) verdictEl.classList.add('verdict-label--real');
   else if (isSynthetic) verdictEl.classList.add('verdict-label--synthetic');
 
+  const confidence = getPredictionConfidence(data);
   const confEl = document.getElementById('pred-confidence');
-  confEl.textContent = `SentinelScore: ${formatSentinelScore(data.confidence)}`;
+  confEl.textContent = `SentinelScore: ${formatSentinelScore(confidence)}`;
 
   document.getElementById('pred-sample-id').textContent = data.sample_id ?? '—';
 
@@ -1900,7 +1909,7 @@ function showPredictionResult(data) {
   state.predictionFeedbackContext = {
     sample_id: data.sample_id ?? null,
     predicted_verdict: data.verdict ?? null,
-    predicted_confidence: data.confidence ?? null,
+    predicted_confidence: confidence,
     recording_input_type: data.recording_input_type ?? null,
   };
   resetPredictionFeedbackUI();
@@ -2153,7 +2162,8 @@ function renderLocalSamples() {
     const el = document.createElement('div');
     el.className = 'local-sample-entry';
     const dateStr = s.date ? new Date(s.date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
-    const confStr = s.confidence != null ? `${(s.confidence * 100).toFixed(1)}%` : '—';
+    const conf = getPredictionConfidence(s);
+    const confStr = conf != null ? `${(conf * 100).toFixed(1)}%` : '—';
     const verdictClass = s.verdict === 'Real' ? 'prediction-verdict--real' : s.verdict === 'Synthetic' ? 'prediction-verdict--synthetic' : '';
     el.innerHTML =
       `<div class="local-sample-header"><span class="local-sample-name">${escapeHtml(s.filename || '—')}</span><span class="local-sample-date">${escapeHtml(dateStr)}</span></div>` +
@@ -2210,7 +2220,7 @@ async function submitRecordingFromReview() {
 
       const sampleId = data?.sample_id ?? null;
       const verdict = data?.verdict ?? null;
-      const confidence = data?.confidence ?? null;
+      const confidence = getPredictionConfidence(data);
       const analysisUrl = data?.analysis_url ?? null;
 
       if (transcriptionEl) {
@@ -2225,6 +2235,7 @@ async function submitRecordingFromReview() {
         filename: name,
         verdict,
         confidence,
+        confidence_score: confidence,
         analysis_url: analysisUrl,
         recording_input_type: recordingInputType,
         source: blob instanceof File ? 'upload' : 'recording',
