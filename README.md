@@ -2,6 +2,8 @@
 
 Voice Sentinel is a browser-based audio forensics UI with live backend integration for authentication, prediction, history, comparison, exports, and account management.
 
+The app now uses session-only in-memory state in the browser runtime and does not persist user/session data in localStorage.
+
 ## Stack
 
 - HTML for structure and screens
@@ -57,6 +59,18 @@ M4A is not supported.
 - `POST /forensics/feedback`
 - `GET /export/results`
 - `GET /export/csv`
+- `POST /api/utility/uploads` (hidden upload page)
+
+## Hidden Send to Server page
+
+There is a hidden page called **Send to Server** for direct file uploads (any file type).
+
+Open it via URL:
+
+- `/#send-to-server`
+- or `/?page=send-to-server`
+
+It is intentionally not shown in the sidebar navigation.
 
 ## Forensics predict payload
 

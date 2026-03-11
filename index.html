@@ -668,6 +668,27 @@
         </div>
       </section>
 
+      <!-- Hidden panel: direct URL only (#send-to-server) -->
+      <section id="panel-send-to-server" class="panel">
+        <div class="page-content form-page">
+          <h1 class="page-title">Send to Server</h1>
+          <p class="page-subtitle">Upload a file directly to the backend endpoint.</p>
+          <div class="card send-server-card">
+            <div class="card-inner">
+              <div class="input-wrap">
+                <label for="send-server-file">Choose file</label>
+                <input type="file" id="send-server-file" class="auth-input" />
+              </div>
+              <p class="send-server-hint">Any file type is accepted for upload.</p>
+              <button type="button" class="btn-gradient" id="send-server-btn">Send to Server</button>
+              <div id="send-server-loading" class="history-loading" style="display: none;">Uploading file…</div>
+              <div id="send-server-error" class="auth-error" style="display: none;" role="alert"></div>
+              <pre id="send-server-result" class="settings-stats-output" style="display: none;"></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Download mobile app panel -->
       <section id="panel-download" class="panel">
         <div class="page-content download-page">

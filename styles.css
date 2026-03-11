@@ -4,9 +4,9 @@
   --light-blue: #38bdf8;
   --accent: #6366f1;
   --dark-text: #1e293b;
-  --background: #f8fbff;
+  --background: #fdfefe;
   --surface: #ffffff;
-  --grey-100: #eef6ff;
+  --grey-100: #f3f8ff;
   --grey-400: #94a3b8;
   --grey-500: #64748b;
   --grey-600: #475569;
@@ -39,9 +39,10 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   background-color: var(--background);
   background-image:
-    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.18), transparent 34%),
-    radial-gradient(circle at 88% 0%, rgba(37, 99, 235, 0.14), transparent 32%),
-    linear-gradient(180deg, #fafdff 0%, #f3f9ff 52%, #eef6ff 100%);
+    radial-gradient(circle at 8% 4%, rgba(56, 189, 248, 0.24), transparent 36%),
+    radial-gradient(circle at 90% 6%, rgba(125, 211, 252, 0.22), transparent 34%),
+    radial-gradient(circle at 52% 100%, rgba(186, 230, 253, 0.24), transparent 44%),
+    linear-gradient(180deg, #ffffff 0%, #f6fbff 46%, #ecf6ff 100%);
   color: var(--dark-text);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
@@ -193,8 +194,18 @@ body {
 .main-content {
   flex: 1;
   overflow-y: auto;
-  background: var(--background);
+  background: transparent;
   min-width: 0;
+}
+
+.send-server-card {
+  max-width: 680px;
+}
+
+.send-server-hint {
+  margin: 2px 0 14px;
+  color: var(--grey-600);
+  font-size: 13px;
 }
 
 .global-disclaimer {

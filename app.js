@@ -16,9 +16,28 @@ const USER_ID_KEY = 'voiceSentinelUserId';
 const USER_EMAIL_KEY = 'voiceSentinelEmail';
 const USER_NAME_STORAGE_KEY = 'voiceSentinelUserName';
 const EDIT_PROFILE_STORAGE_KEY = 'voiceSentinelUserType';
-const SAMPLES_STORAGE_KEY = 'voiceSentinelSamples';
 const RECORDING_INPUT_TYPE_KEY = 'recording_input_type';
 const PREDICTION_FEEDBACK_ENDPOINT = 'forensics/feedback';
+const SEND_TO_SERVER_ENDPOINT = '/api/utility/uploads';
+
+// Session-only storage. Data is intentionally not persisted across refresh/restart.
+const sessionStore = new Map();
+
+function storageGet(key) {
+  return sessionStore.has(key) ? sessionStore.get(key) : null;
+}
+
+function storageSet(key, value) {
+  if (value == null) {
+    sessionStore.delete(key);
+    return;
+  }
+  sessionStore.set(key, String(value));
+}
+
+function storageRemove(key) {
+  sessionStore.delete(key);
+}
 
 const ALLOWED_AUDIO_TYPES = ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3'];
 const ALLOWED_AUDIO_EXTS = ['.wav', '.mp3'];
@@ -29,75 +48,56 @@ function isAllowedAudioFile(file) {
   return ALLOWED_AUDIO_TYPES.includes(file.type) || ALLOWED_AUDIO_EXTS.includes(ext);
 }
 
-function sampleStorageKey(uid) {
-  return `${SAMPLES_STORAGE_KEY}_${uid}`;
+function getSavedSamples() {
+  return [];
 }
 
-function getSavedSamples(uid) {
-  const id = uid ?? state.userId ?? getStoredUserId();
-  if (id == null) return [];
-  try {
-    const raw = localStorage.getItem(sampleStorageKey(id));
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-function saveSampleFootprint(entry) {
-  const uid = entry.user_id ?? state.userId ?? getStoredUserId();
-  if (uid == null) return;
-  try {
-    const samples = getSavedSamples(uid);
-    samples.unshift(entry);
-    if (samples.length > 200) samples.length = 200;
-    localStorage.setItem(sampleStorageKey(uid), JSON.stringify(samples));
-  } catch (_) {}
-}
+function saveSampleFootprint() {}
 
 /** Returns the stored auth token, or null if not logged in. */
 function getAuthToken() {
-  try { return localStorage.getItem(AUTH_TOKEN_KEY); } catch { return null; }
+  return storageGet(AUTH_TOKEN_KEY);
 }
 
 /** Returns the stored user id as a number, or null. */
 function getStoredUserId() {
-  try {
-    const v = localStorage.getItem(USER_ID_KEY);
-    return v != null ? Number(v) : null;
-  } catch { return null; }
+  const v = storageGet(USER_ID_KEY);
+  return v != null ? Number(v) : null;
 }
 
 /** Returns the stored user email, or null. */
 function getStoredEmail() {
-  try { return localStorage.getItem(USER_EMAIL_KEY); } catch { return null; }
+  return storageGet(USER_EMAIL_KEY);
 }
 
 function getStoredUserName() {
-  try { return localStorage.getItem(USER_NAME_STORAGE_KEY); } catch { return null; }
+  return storageGet(USER_NAME_STORAGE_KEY);
 }
 
 function getStoredUserType() {
-  try { return localStorage.getItem(EDIT_PROFILE_STORAGE_KEY); } catch { return null; }
+  return storageGet(EDIT_PROFILE_STORAGE_KEY);
 }
 
-/** Persist user id and email to localStorage + state. */
+/** Persist user id and email to session memory + state. */
 function storeUserIdentity(id, email) {
   if (id != null) {
     state.userId = Number(id);
-    try { localStorage.setItem(USER_ID_KEY, String(id)); } catch (_) {}
+    storageSet(USER_ID_KEY, String(id));
   }
   if (email) {
-    try { localStorage.setItem(USER_EMAIL_KEY, email); } catch (_) {}
+    storageSet(USER_EMAIL_KEY, email);
   }
 }
 
-/** Clears all auth-related storage (token, user id, email). */
+/** Clears all auth-related session memory (token, user id, email). */
 function clearAuthToken() {
-  try {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(USER_ID_KEY);
-    localStorage.removeItem(USER_EMAIL_KEY);
-  } catch (_) {}
+  storageRemove(AUTH_TOKEN_KEY);
+  storageRemove(USER_ID_KEY);
+  storageRemove(USER_EMAIL_KEY);
+  storageRemove(USER_NAME_STORAGE_KEY);
+  storageRemove(EDIT_PROFILE_STORAGE_KEY);
   state.userId = null;
+  state.userType = 'BASIC';
   updateUserSurface();
 }
 
@@ -177,7 +177,14 @@ const state = {
   feedbackPromptActive: false,
   /** User id from GET /user/me (for forensics API). */
   userId: null,
+  /** User type/role resolved from auth and profile responses. */
+  userType: 'BASIC',
 };
+
+function normalizeUserType(value) {
+  if (!value) return 'BASIC';
+  return String(value).trim().toUpperCase();
+}
 
 function formatSentinelScore(confidence) {
   return confidence != null ? `${(confidence * 100).toFixed(1)}%` : '—';
@@ -194,7 +201,7 @@ function getPredictionConfidence(obj) {
 function updateUserSurface() {
   const name = getStoredUserName();
   const email = getStoredEmail();
-  const userType = getStoredUserType() || 'BASIC';
+  const userType = normalizeUserType(state.userType || getStoredUserType() || 'BASIC');
   const isAuthenticated = !!getAuthToken();
 
   const greetEl = document.getElementById('home-greeting');
@@ -233,6 +240,7 @@ const panels = {
   audioBreakdown: document.getElementById('panel-audio-breakdown'),
   history: document.getElementById('panel-history'),
   download: document.getElementById('panel-download'),
+  sendToServer: document.getElementById('panel-send-to-server'),
 };
 
 // --- Enter app (show shell, hide welcome) ---
@@ -241,6 +249,7 @@ function enterApp() {
   welcomeScreen.style.display = 'none';
   appShell.style.display = 'flex';
   showPanel('home');
+  routeFromUrlIfNeeded();
 }
 
 function leaveApp() {
@@ -261,6 +270,7 @@ const navToPanelKey = {
   'audio-breakdown': 'audioBreakdown',
   'history': 'history',
   'download': 'download',
+  'send-to-server': 'sendToServer',
 };
 
 // --- Panel navigation ---
@@ -286,6 +296,19 @@ function navTo(path) {
   if (path === 'history') loadHistoryFromServer();
 }
 
+function getHiddenPanelFromUrl() {
+  const hash = (window.location.hash || '').replace(/^#/, '').trim().toLowerCase();
+  const page = new URLSearchParams(window.location.search || '').get('page');
+  const pageNorm = page ? String(page).trim().toLowerCase() : '';
+  if (hash === 'send-to-server' || pageNorm === 'send-to-server') return 'send-to-server';
+  return null;
+}
+
+function routeFromUrlIfNeeded() {
+  const hiddenPath = getHiddenPanelFromUrl();
+  if (hiddenPath) navTo(hiddenPath);
+}
+
 function injectGlobalDisclaimers() {
   document.querySelectorAll('.page-content').forEach((content) => {
     if (!content || content.querySelector('.panel-disclaimer')) return;
@@ -303,6 +326,17 @@ function injectGlobalDisclaimers() {
 
 injectGlobalDisclaimers();
 
+// Hidden route shortcut: Ctrl+Shift+U opens Send to Server.
+document.addEventListener('keydown', (e) => {
+  if (!e.ctrlKey || !e.shiftKey || e.key.toLowerCase() !== 'u') return;
+  e.preventDefault();
+  navTo('send-to-server');
+});
+
+window.addEventListener('hashchange', () => {
+  routeFromUrlIfNeeded();
+});
+
 // --- Sidebar nav ---
 document.querySelectorAll('.sidebar-nav .nav-item[data-nav]').forEach((btn) => {
   btn.addEventListener('click', () => navTo(btn.getAttribute('data-nav')));
@@ -317,7 +351,7 @@ document.getElementById('home-go-compare')?.addEventListener('click', () => navT
 document.getElementById('home-go-breakdown')?.addEventListener('click', () => navTo('audio-breakdown'));
 document.getElementById('home-go-history')?.addEventListener('click', () => navTo('history'));
 
-// --- Restore session on load/refresh: load identity from localStorage, then confirm from API ---
+// --- Restore session in-memory and confirm identity from API when available ---
 if (getAuthToken()) {
   const storedId = getStoredUserId();
   if (storedId != null) state.userId = storedId;
@@ -336,6 +370,16 @@ if (getAuthToken()) {
       if (res.ok && data && typeof data === 'object') {
         const id = data.id ?? data.user_id ?? data.userId;
         storeUserIdentity(id, data.email);
+        const level = data.preferred_explanation_level ?? data.level ?? data.user_type ?? data.userType;
+        if (level) {
+          state.userType = normalizeUserType(level);
+          storageSet(EDIT_PROFILE_STORAGE_KEY, state.userType);
+          storageSet('voiceSentinelUserType', state.userType);
+        }
+        if (typeof data.name === 'string' && data.name.trim()) {
+          storageSet(USER_NAME_STORAGE_KEY, data.name.trim());
+        }
+        updateUserSurface();
       }
     } catch (_) {}
   })();
@@ -450,8 +494,8 @@ async function handleRegister() {
 
     if (res.ok) {
       try {
-        localStorage.setItem(EDIT_PROFILE_STORAGE_KEY, level);
-        if (name) localStorage.setItem(USER_NAME_STORAGE_KEY, name);
+        storageSet(EDIT_PROFILE_STORAGE_KEY, level);
+        if (name) storageSet(USER_NAME_STORAGE_KEY, name);
       } catch (_) {}
       setAuthMode(true);
       const passwordConfirmEl = document.getElementById('auth-password-confirm');
@@ -538,10 +582,19 @@ async function handleLogin() {
       if (data && typeof data === 'object') {
         // token field = user_id (used as auth token for all routes)
         const token = data.token ?? data.access_token;
-        if (token) try { localStorage.setItem(AUTH_TOKEN_KEY, String(token)); } catch (_) {}
+        if (token) storageSet(AUTH_TOKEN_KEY, String(token));
         storeUserIdentity(token, email);
+        const level = data.preferred_explanation_level ?? data.level ?? data.user_type ?? data.userType;
+        if (level) {
+          state.userType = normalizeUserType(level);
+          storageSet(EDIT_PROFILE_STORAGE_KEY, state.userType);
+          storageSet('voiceSentinelUserType', state.userType);
+        }
+        if (typeof data.name === 'string' && data.name.trim()) {
+          storageSet(USER_NAME_STORAGE_KEY, data.name.trim());
+        }
       } else if (typeof data === 'string' && data) {
-        try { localStorage.setItem(AUTH_TOKEN_KEY, data); } catch (_) {}
+        storageSet(AUTH_TOKEN_KEY, data);
         storeUserIdentity(data, email);
       }
       enterApp();
@@ -593,10 +646,10 @@ function applyTheme(theme) {
     toggle.classList.toggle('on', theme === 'dark');
     toggle.setAttribute('aria-pressed', theme === 'dark');
   }
-  try { localStorage.setItem('voiceSentinelTheme', theme); } catch (_) {}
+  storageSet('voiceSentinelTheme', theme);
 }
 
-const savedTheme = (typeof localStorage !== 'undefined' && localStorage.getItem('voiceSentinelTheme')) || 'light';
+const savedTheme = storageGet('voiceSentinelTheme') || 'light';
 applyTheme(savedTheme);
 
 document.getElementById('toggle-dark')?.addEventListener('click', () => {
@@ -604,12 +657,15 @@ document.getElementById('toggle-dark')?.addEventListener('click', () => {
   applyTheme(next);
 });
 
+if (getHiddenPanelFromUrl() && appShell?.style.display === 'none') {
+  enterApp();
+}
+routeFromUrlIfNeeded();
+
 // --- Change user type ---
 const changeUserSelect = document.getElementById('change-user-select');
-try {
-  const stored = localStorage.getItem('voiceSentinelUserType');
-  if (stored && changeUserSelect) changeUserSelect.value = stored;
-} catch (_) {}
+const storedChangeUserType = storageGet('voiceSentinelUserType');
+if (storedChangeUserType && changeUserSelect) changeUserSelect.value = storedChangeUserType;
 document.getElementById('change-user-save')?.addEventListener('click', async () => {
   const level = changeUserSelect?.value ?? 'BASIC';
   const saveBtn = document.getElementById('change-user-save');
@@ -630,7 +686,9 @@ document.getElementById('change-user-save')?.addEventListener('click', async () 
     });
     const text = await res.text();
     if (res.ok) {
-      try { localStorage.setItem('voiceSentinelUserType', level); } catch (_) {}
+      storageSet('voiceSentinelUserType', level);
+      storageSet(EDIT_PROFILE_STORAGE_KEY, level);
+      state.userType = normalizeUserType(level);
       updateUserSurface();
       navTo('home');
     } else {
@@ -674,17 +732,13 @@ async function openEditProfileModal() {
     errorEl.style.display = 'none';
     errorEl.textContent = '';
   }
-  try {
-    const storedName = localStorage.getItem(USER_NAME_STORAGE_KEY);
-    if (nameInput) {
-      nameInput.value = storedName ?? '';
-      editProfileInitialName = nameInput.value;
-    }
-  } catch (_) {}
-  try {
-    const stored = localStorage.getItem(EDIT_PROFILE_STORAGE_KEY);
-    if (stored && userTypeSelect) userTypeSelect.value = stored;
-  } catch (_) {}
+  const storedName = storageGet(USER_NAME_STORAGE_KEY);
+  if (nameInput) {
+    nameInput.value = storedName ?? '';
+    editProfileInitialName = nameInput.value;
+  }
+  const storedLevel = storageGet(EDIT_PROFILE_STORAGE_KEY);
+  if (storedLevel && userTypeSelect) userTypeSelect.value = storedLevel;
   editProfileInitialLevel = userTypeSelect?.value ?? 'BASIC';
   if (!getAuthToken()) return;
   try {
@@ -699,10 +753,16 @@ async function openEditProfileModal() {
       storeUserIdentity(id, data.email);
       const level = data.preferred_explanation_level ?? data.level ?? data.user_type ?? data.userType;
       if (level && userTypeSelect) {
+        state.userType = normalizeUserType(level);
         const opt = Array.from(userTypeSelect.options).find((o) => o.value === level);
         if (opt) userTypeSelect.value = level;
-        else try { localStorage.setItem(EDIT_PROFILE_STORAGE_KEY, level); } catch (_) {}
+        storageSet(EDIT_PROFILE_STORAGE_KEY, state.userType);
+        storageSet('voiceSentinelUserType', state.userType);
       }
+      if (typeof data.name === 'string' && data.name.trim()) {
+        storageSet(USER_NAME_STORAGE_KEY, data.name.trim());
+      }
+      updateUserSurface();
     }
   } catch (_) {}
   editProfileInitialLevel = userTypeSelect?.value ?? 'BASIC';
@@ -776,7 +836,7 @@ async function handleEditProfileSave() {
 
   // Name: stored locally only; never sent to change-password or user/update APIs. When user updates name, we only update the stored version here.
   if (wantNameChange) {
-    try { localStorage.setItem(USER_NAME_STORAGE_KEY, name); } catch (_) {}
+    storageSet(USER_NAME_STORAGE_KEY, name);
     updateUserSurface();
   }
 
@@ -836,7 +896,9 @@ async function handleEditProfileSave() {
       });
 
       if (res.ok) {
-        try { localStorage.setItem(EDIT_PROFILE_STORAGE_KEY, level); } catch (_) {}
+        storageSet(EDIT_PROFILE_STORAGE_KEY, level);
+        storageSet('voiceSentinelUserType', level);
+        state.userType = normalizeUserType(level);
         if (changeUserSelect) changeUserSelect.value = level;
         updateUserSurface();
       } else {
@@ -934,7 +996,6 @@ document.getElementById('settings-delete-account')?.addEventListener('click', as
     const text = await res.text();
     if (res.ok) {
       clearAuthToken();
-      try { localStorage.removeItem('voiceSentinelUserType'); localStorage.removeItem(EDIT_PROFILE_STORAGE_KEY); } catch (_) {}
       navTo('welcome');
       return;
     }
@@ -1069,6 +1130,61 @@ async function handleExport(format) {
 
 document.getElementById('export-json-btn')?.addEventListener('click', () => handleExport('json'));
 document.getElementById('export-csv-btn')?.addEventListener('click', () => handleExport('csv'));
+
+// --- Hidden: Send to Server ---
+document.getElementById('send-server-btn')?.addEventListener('click', async () => {
+  const fileInput = document.getElementById('send-server-file');
+  const loadingEl = document.getElementById('send-server-loading');
+  const errorEl = document.getElementById('send-server-error');
+  const resultEl = document.getElementById('send-server-result');
+  const btn = document.getElementById('send-server-btn');
+
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (resultEl) { resultEl.style.display = 'none'; resultEl.textContent = ''; }
+
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    if (errorEl) { errorEl.textContent = 'Choose a file first.'; errorEl.style.display = 'block'; }
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (loadingEl) loadingEl.style.display = 'block';
+
+  try {
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    const userId = state.userId ?? getStoredUserId();
+    if (userId != null) fd.append('user_id', String(userId));
+
+    const res = await apiFetch(SEND_TO_SERVER_ENDPOINT, {
+      method: 'POST',
+      body: fd,
+    });
+    const text = await res.text();
+
+    if (!res.ok) {
+      if (errorEl) { errorEl.textContent = parseApiError(res, text); errorEl.style.display = 'block'; }
+      return;
+    }
+
+    let output = text;
+    try {
+      const parsed = text ? JSON.parse(text) : null;
+      output = parsed && typeof parsed === 'object' ? JSON.stringify(parsed, null, 2) : String(parsed ?? text);
+    } catch (_) {}
+
+    if (resultEl) {
+      resultEl.textContent = output || 'Upload completed successfully.';
+      resultEl.style.display = 'block';
+    }
+  } catch (err) {
+    if (errorEl) { errorEl.textContent = formatNetworkError(err); errorEl.style.display = 'block'; }
+  } finally {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (btn) btn.disabled = false;
+  }
+});
 
 // --- Raw PCM capture: records uncompressed float32 samples directly from the mic ---
 // This avoids any lossy encoding (webm/opus) so no acoustic features are lost.
@@ -1882,12 +1998,6 @@ function populateSamplePicker(historyData) {
   if (Array.isArray(historyData)) {
     items = historyData.filter((h) => h && h.sample_id != null);
   }
-  const localSamples = getSavedSamples();
-  localSamples.forEach((s) => {
-    if (s.sample_id != null && !items.some((h) => String(h.sample_id) === String(s.sample_id))) {
-      items.push(s);
-    }
-  });
   if (items.length === 0) {
     select.innerHTML += '<option value="" disabled>No samples found</option>';
     return;
@@ -2410,22 +2520,20 @@ uploadAudioInput?.addEventListener('change', () => {
   uploadAudioInput.value = '';
 });
 
-// --- Persist recordings in localStorage per user ---
+// --- Session-only recordings (cleared on refresh/restart) ---
 const RECORDINGS_STORAGE_KEY = 'voiceSentinelRecordings';
 function saveRecordings() {
   const uid = state.userId ?? getStoredUserId();
   if (uid == null) return;
-  try {
-    const data = state.recordings.map(({ name, duration, status, verdict, confidence, sampleId }) =>
-      ({ name, duration, status, verdict, confidence, sampleId }));
-    localStorage.setItem(`${RECORDINGS_STORAGE_KEY}_${uid}`, JSON.stringify(data));
-  } catch (_) {}
+  const data = state.recordings.map(({ name, duration, status, verdict, confidence, sampleId }) =>
+    ({ name, duration, status, verdict, confidence, sampleId }));
+  storageSet(`${RECORDINGS_STORAGE_KEY}_${uid}`, JSON.stringify(data));
 }
 function loadRecordings() {
   const uid = state.userId ?? getStoredUserId();
   if (uid == null) return;
   try {
-    const raw = localStorage.getItem(`${RECORDINGS_STORAGE_KEY}_${uid}`);
+    const raw = storageGet(`${RECORDINGS_STORAGE_KEY}_${uid}`);
     if (raw) state.recordings = JSON.parse(raw);
   } catch (_) {}
 }
