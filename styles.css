@@ -1967,6 +1967,20 @@ body {
 }
 .verdict-meta-item a:hover { text-decoration: underline; }
 
+.prediction-link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--primary-blue);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.prediction-link-btn:hover {
+  text-decoration: underline;
+}
+
 .prediction-feedback {
   margin-top: 14px;
   padding-top: 14px;

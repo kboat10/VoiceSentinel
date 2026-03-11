@@ -1900,11 +1900,7 @@ function showPredictionResult(data) {
   fnEl.textContent = data.filename ?? '';
 
   const urlEl = document.getElementById('pred-analysis-url');
-  if (data.analysis_url) {
-    urlEl.innerHTML = `<a href="${escapeHtml(data.analysis_url)}" target="_blank" rel="noopener">View raw analysis ↗</a>`;
-  } else {
-    urlEl.textContent = '';
-  }
+  urlEl.innerHTML = '<button type="button" class="prediction-link-btn" id="pred-open-analysis">Jump to full analysis</button>';
 
   state.predictionFeedbackContext = {
     sample_id: data.sample_id ?? null,
@@ -1923,6 +1919,17 @@ function showPredictionResult(data) {
     detailBody.classList.add('breakdown-collapsed');
     if (detailToggle) detailToggle.classList.remove('open');
   }
+
+  document.getElementById('pred-open-analysis')?.addEventListener('click', () => {
+    const analysisCard = document.getElementById('analysis-detail');
+    const analysisBody = document.getElementById('analysis-detail-body');
+    const analysisToggle = document.getElementById('analysis-detail-toggle');
+    if (!analysisCard || !analysisBody) return;
+    analysisCard.style.display = '';
+    analysisBody.classList.remove('breakdown-collapsed');
+    if (analysisToggle) analysisToggle.classList.add('open');
+    analysisCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 
   setTimeout(() => {
     openMandatoryFeedbackModal();
