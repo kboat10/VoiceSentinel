@@ -2196,40 +2196,8 @@ async function openMandatoryFeedbackModal() {
   }
 }
 
-function renderLocalSamples() {
-  const section = document.getElementById('local-samples-section');
-  const listEl = document.getElementById('local-samples-list');
-  if (!section || !listEl) return 0;
-  const samples = getSavedSamples();
-  if (samples.length === 0) { section.style.display = 'none'; return 0; }
-  section.style.display = '';
-  listEl.innerHTML = '';
-  samples.forEach((s) => {
-    const el = document.createElement('div');
-    el.className = 'local-sample-entry';
-    const dateStr = s.date ? new Date(s.date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
-    const conf = getPredictionConfidence(s);
-    const confStr = conf != null ? `${(conf * 100).toFixed(1)}%` : '—';
-    const verdictClass = s.verdict === 'Real' ? 'prediction-verdict--real' : s.verdict === 'Synthetic' ? 'prediction-verdict--synthetic' : '';
-    el.innerHTML =
-      `<div class="local-sample-header"><span class="local-sample-name">${escapeHtml(s.filename || '—')}</span><span class="local-sample-date">${escapeHtml(dateStr)}</span></div>` +
-      `<div class="local-sample-details">` +
-      `<span class="local-sample-verdict ${verdictClass}">${escapeHtml(s.verdict || '—')}</span>` +
-      `<span>SentinelScore: ${escapeHtml(confStr)}</span>` +
-      `<span>${escapeHtml(s.source === 'upload' ? 'Uploaded' : 'Recorded')}</span>` +
-      (s.sample_id ? `<span>ID: ${escapeHtml(String(s.sample_id))}</span>` : '') +
-      `</div>` +
-      (s.sample_id ? `<div class="history-entry-actions"><button type="button" class="btn-primary history-open-btn">Open analysis</button></div>` : '');
-    el.querySelector('.history-open-btn')?.addEventListener('click', () => openSampleBreakdown(s.sample_id, s.verdict));
-    listEl.appendChild(el);
-  });
-  return samples.length;
-}
-
-function updateHistorySummary(localCount, serverCount) {
-  const localEl = document.getElementById('history-local-count');
+function updateHistorySummary(serverCount) {
   const serverEl = document.getElementById('history-server-count');
-  if (localEl) localEl.textContent = String(localCount ?? 0);
   if (serverEl) serverEl.textContent = String(serverCount ?? 0);
 }
 
@@ -2660,6 +2628,8 @@ function renderHistoryEntry(item) {
   const conf = item.confidence_score ?? item.confidence;
   const confStr = conf != null ? `${(conf * 100).toFixed(1)}%` : '—';
   const sampleId = item.sample_id ?? '—';
+  const filename = item.filename ?? '';
+  const sourceTag = item.source_tag ?? '';
   const date = item.created_at ?? item.date;
   const dateStr = date ? new Date(date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
 
@@ -2671,6 +2641,8 @@ function renderHistoryEntry(item) {
       `</div>` +
       `<div class="history-entry-details">` +
         `<span>Sample ID: ${escapeHtml(String(sampleId))}</span>` +
+        (filename ? `<span>${escapeHtml(filename)}</span>` : '') +
+        (sourceTag ? `<span>${escapeHtml(sourceTag)}</span>` : '') +
         (dateStr ? `<span>${escapeHtml(dateStr)}</span>` : '') +
       `</div>` +
       (item.sample_id != null ? `<div class="history-entry-actions"><button type="button" class="btn-primary history-open-btn">Open analysis</button></div>` : '') +
@@ -2684,8 +2656,7 @@ async function loadHistoryFromServer() {
   const errorEl = document.getElementById('history-error');
   const loadingEl = document.getElementById('history-loading');
   const placeholderCard = document.getElementById('history-placeholder-card');
-  const localCount = renderLocalSamples();
-  updateHistorySummary(localCount, 0);
+  updateHistorySummary(0);
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
   if (listEl) listEl.style.display = 'none';
   if (placeholderCard) placeholderCard.style.display = 'none';
@@ -2716,28 +2687,32 @@ async function loadHistoryFromServer() {
     const clearBtn = document.getElementById('clear-history-btn');
     let hasEntries = false;
     let serverCount = 0;
+    let serverItems = [];
+    if (Array.isArray(data)) serverItems = data;
+    else if (data != null && data !== '') serverItems = [data];
+
+    serverItems.sort((a, b) => {
+      const da = new Date(a.created_at ?? a.date ?? 0).getTime();
+      const db = new Date(b.created_at ?? b.date ?? 0).getTime();
+      return db - da;
+    });
+
     if (listEl) {
       listEl.innerHTML = '';
-      if (Array.isArray(data) && data.length > 0) {
-        data.forEach((item) => listEl.appendChild(renderHistoryEntry(item)));
+      if (serverItems.length > 0) {
+        serverItems.forEach((item) => listEl.appendChild(renderHistoryEntry(item)));
         hasEntries = true;
-        serverCount = data.length;
-      } else if (Array.isArray(data)) {
-        listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>No history yet. Record or upload audio and submit to see entries here.</p></div></div>';
-      } else if (data !== null && data !== '') {
-        listEl.appendChild(renderHistoryEntry(data));
-        hasEntries = true;
-        serverCount = 1;
+        serverCount = serverItems.length;
       } else {
         listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>No history yet. Record or upload audio and submit to see entries here.</p></div></div>';
       }
       listEl.style.display = 'block';
       listEl.classList.toggle('history-list-empty', !hasEntries);
     }
-    updateHistorySummary(localCount, serverCount);
+    updateHistorySummary(serverCount);
     if (clearBtn) clearBtn.style.display = hasEntries ? '' : 'none';
     if (placeholderCard) placeholderCard.style.display = 'none';
-    populateSamplePicker(Array.isArray(data) ? data : []);
+    populateSamplePicker(serverItems);
   } catch (err) {
     if (loadingEl) loadingEl.style.display = 'none';
     if (errorEl) {
@@ -2780,7 +2755,7 @@ document.getElementById('clear-history-btn')?.addEventListener('click', async ()
         listEl.innerHTML = '<div class="card"><div class="card-inner placeholder-card"><p>History cleared. Record or upload audio to see entries here.</p></div></div>';
         listEl.style.display = 'block';
       }
-      updateHistorySummary(renderLocalSamples(), 0);
+      updateHistorySummary(0);
       if (btn) btn.style.display = 'none';
     } else {
       if (errorEl) { errorEl.textContent = parseApiError(res, text); errorEl.style.display = 'block'; }

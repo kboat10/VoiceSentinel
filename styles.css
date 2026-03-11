@@ -523,6 +523,32 @@ body {
   color: var(--grey-400);
 }
 
+select,
+.auth-input[type="number"] {
+  font-family: inherit;
+}
+
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--grey-500) 50%),
+    linear-gradient(135deg, var(--grey-500) 50%, transparent 50%),
+    linear-gradient(to right, transparent, transparent);
+  background-position:
+    calc(100% - 18px) calc(50% - 2px),
+    calc(100% - 12px) calc(50% - 2px),
+    100% 0;
+  background-size: 6px 6px, 6px 6px, 2.5em 2.5em;
+  background-repeat: no-repeat;
+  padding-right: 34px !important;
+  border-radius: 10px;
+}
+
+select:hover {
+  border-color: rgba(37, 99, 235, 0.45);
+}
+
 /* Icon circle (like Flutter) */
 .icon-circle {
   width: 64px;
