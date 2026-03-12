@@ -127,7 +127,7 @@ body {
 .sidebar-nav {
   flex: 1;
   padding: 16px 12px;
-  overflow-y: auto;
+  overflow-y: visible;
 }
 
 .nav-item {
@@ -193,7 +193,7 @@ body {
 
 .main-content {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: visible;
   background: transparent;
   min-width: 0;
 }

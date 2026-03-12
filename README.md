@@ -59,11 +59,13 @@ M4A is not supported.
 - `POST /forensics/feedback`
 - `GET /export/results`
 - `GET /export/csv`
-- `POST /api/utility/uploads` (hidden upload page)
+- `POST /utility/uploads` (hidden upload page; resolved via API base/proxy)
 
 ## Hidden Send to Server page
 
 There is a hidden page called **Send to Server** for direct file uploads (any file type).
+
+Note: upload size limits are controlled by the backend/proxy infrastructure, not by the frontend code.
 
 Open it via URL:
 

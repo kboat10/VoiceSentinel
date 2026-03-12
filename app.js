@@ -18,7 +18,7 @@ const USER_NAME_STORAGE_KEY = 'voiceSentinelUserName';
 const EDIT_PROFILE_STORAGE_KEY = 'voiceSentinelUserType';
 const RECORDING_INPUT_TYPE_KEY = 'recording_input_type';
 const PREDICTION_FEEDBACK_ENDPOINT = 'forensics/feedback';
-const SEND_TO_SERVER_ENDPOINT = '/api/utility/uploads';
+const SEND_TO_SERVER_ENDPOINT = 'utility/uploads';
 
 // Session-only storage. Data is intentionally not persisted across refresh/restart.
 const sessionStore = new Map();
@@ -789,6 +789,9 @@ function showEditProfileError(message) {
 function parseApiError(res, text) {
   const connectionErr = formatApiConnectionError(res, text);
   if (connectionErr) return connectionErr;
+  if (res.status === 413) {
+    return 'Upload rejected: file is too large for the server limit. Try a smaller file.';
+  }
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (res.status === 422 && data && data.detail != null) {
