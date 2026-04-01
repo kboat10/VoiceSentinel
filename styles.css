@@ -6,6 +6,7 @@
   --dark-text: #0f172a;
   --background: #f2f8ff;
   --surface: #ffffff;
+  --card-bg: #ffffff;
   --grey-100: #e8f3ff;
   --grey-400: #94a3b8;
   --grey-500: #64748b;
@@ -23,6 +24,7 @@
 [data-theme="dark"] {
   --background: #020617;
   --surface: #0b1222;
+  --card-bg: #0f172a;
   --dark-text: #dbeafe;
   --border: #1e293b;
   --grey-100: #0f172a;
@@ -51,6 +53,14 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   line-height: 1.6;
+}
+
+[data-theme="dark"] body {
+  background-image:
+    radial-gradient(circle at 8% 4%, rgba(34, 211, 238, 0.2), transparent 34%),
+    radial-gradient(circle at 90% 6%, rgba(14, 165, 233, 0.24), transparent 36%),
+    radial-gradient(circle at 52% 100%, rgba(8, 47, 73, 0.5), transparent 44%),
+    linear-gradient(180deg, #020617 0%, #0b1120 42%, #030712 100%);
 }
 
 /* Layout */
