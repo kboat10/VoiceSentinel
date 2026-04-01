@@ -51,6 +51,7 @@ M4A is not supported.
 - `DELETE /user/terminate`
 - `GET /system/stats`
 - `POST /forensics/predict`
+- `POST /forensics/compare/upload`
 - `GET /forensics/history`
 - `DELETE /forensics/history/clear`
 - `GET /forensics/compare`
@@ -87,6 +88,21 @@ It is intentionally not shown in the sidebar navigation.
 - `upload`
 - `live_source`
 - `live_user`
+
+## Forensics compare flows
+
+Fresh uploads use `POST /forensics/compare/upload` with multipart form-data:
+
+- `file_1`
+- `file_2`
+- `user_id` (when available)
+- `recording_input_type` (`upload` for the compare UI)
+
+Saved analyses use `GET /forensics/compare` with query params:
+
+- `sample_id_1`
+- `sample_id_2`
+- `user_id`
 
 ## Auth behavior
 

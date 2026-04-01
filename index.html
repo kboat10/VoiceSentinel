@@ -489,38 +489,71 @@
       <section id="panel-compare" class="panel">
         <div class="page-content form-page">
           <h1 class="page-title">Comparative Analysis</h1>
-          <p class="page-subtitle">Upload two audio samples and compare their analysis results side by side.</p>
-          <div class="ux-flow-hint"><strong>Tip:</strong> Compare clips recorded in similar environments for the most meaningful side-by-side interpretation.</div>
+            <p class="page-subtitle">Use fresh uploads for new audio, or compare saved results from your history with stored sample IDs.</p>
+            <div class="ux-flow-hint"><strong>Rule of thumb:</strong> Upload fresh audio with the upload flow. Revisit stored analyses with the saved-samples flow.</div>
 
-          <div class="compare-uploads">
-            <!-- Sample 1 -->
-            <div class="compare-upload-card" id="compare-card-1">
-              <input type="file" id="compare-file-1" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav,audio/mp3" style="display: none;" />
-              <div class="compare-upload-area" id="compare-area-1" role="button" tabindex="0">
-                <div class="icon-circle">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <div class="compare-mode-switch" role="radiogroup" aria-label="Compare mode">
+              <label class="compare-mode-option">
+                <input type="radio" name="compare-mode" value="upload" checked />
+                <span>Upload Fresh Audio</span>
+              </label>
+              <label class="compare-mode-option">
+                <input type="radio" name="compare-mode" value="saved" />
+                <span>Use Saved Samples</span>
+              </label>
+            </div>
+
+            <div id="compare-upload-fields">
+              <div class="compare-uploads">
+                <div class="compare-upload-card" id="compare-card-1">
+                  <input type="file" id="compare-file-1" accept=".wav,.mp3,.flac,.ogg,audio/wav,audio/x-wav,audio/mpeg,audio/mp3,audio/flac,audio/x-flac,audio/ogg,audio/vorbis" style="display: none;" />
+                  <div class="compare-upload-area" id="compare-area-1" role="button" tabindex="0">
+                    <div class="icon-circle">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <h3>Sample 1</h3>
+                    <p class="compare-file-name" id="compare-name-1">Click to upload WAV, MP3, FLAC, or OGG</p>
+                  </div>
                 </div>
-                <h3>Sample 1</h3>
-                <p class="compare-file-name" id="compare-name-1">Click to upload WAV or MP3</p>
+                <div class="compare-upload-card" id="compare-card-2">
+                  <input type="file" id="compare-file-2" accept=".wav,.mp3,.flac,.ogg,audio/wav,audio/x-wav,audio/mpeg,audio/mp3,audio/flac,audio/x-flac,audio/ogg,audio/vorbis" style="display: none;" />
+                  <div class="compare-upload-area" id="compare-area-2" role="button" tabindex="0">
+                    <div class="icon-circle">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <h3>Sample 2</h3>
+                    <p class="compare-file-name" id="compare-name-2">Click to upload WAV, MP3, FLAC, or OGG</p>
+                  </div>
+                </div>
               </div>
             </div>
-            <!-- Sample 2 -->
-            <div class="compare-upload-card" id="compare-card-2">
-              <input type="file" id="compare-file-2" accept=".wav,.mp3,audio/wav,audio/mpeg,audio/x-wav,audio/mp3" style="display: none;" />
-              <div class="compare-upload-area" id="compare-area-2" role="button" tabindex="0">
-                <div class="icon-circle">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                </div>
-                <h3>Sample 2</h3>
-                <p class="compare-file-name" id="compare-name-2">Click to upload WAV or MP3</p>
+
+            <div id="compare-saved-fields" class="compare-saved-fields" style="display: none;">
+              <div class="compare-saved-header">
+                <p class="compare-saved-copy">Load two existing analyses from your history and compare them without re-uploading audio.</p>
+                <button type="button" class="btn-secondary" id="compare-history-refresh-btn">Refresh History</button>
               </div>
+              <div class="compare-saved-grid">
+                <label class="compare-select-card" for="compare-saved-sample-1">
+                  <span class="compare-select-label">Saved Sample 1</span>
+                  <select id="compare-saved-sample-1" class="compare-select-input">
+                    <option value="" selected>Select a saved sample…</option>
+                  </select>
+                </label>
+                <label class="compare-select-card" for="compare-saved-sample-2">
+                  <span class="compare-select-label">Saved Sample 2</span>
+                  <select id="compare-saved-sample-2" class="compare-select-input">
+                    <option value="" selected>Select a saved sample…</option>
+                  </select>
+                </label>
+              </div>
+              <div id="compare-saved-status" class="compare-saved-status" style="display: none;"></div>
             </div>
-          </div>
 
           <div class="compare-actions">
             <div id="compare-error" class="auth-error" style="display: none;" role="alert"></div>
             <button type="button" class="btn-primary compare-submit-btn" id="compare-submit-btn" disabled>
-              Compare Samples
+                Compare Fresh Samples
             </button>
             <div id="compare-loading" class="history-loading" style="display: none;">Uploading and analyzing…</div>
           </div>

@@ -2,7 +2,7 @@
  * Voice Sentinel – Web UI.
  * API base: local/dev = http://45.55.247.199/api; on Vercel = /api (proxied in vercel.json).
  * All APIs use this base; none send the user's name.
- * Endpoints: POST /auth/register, POST /auth/login, GET /user/me, PATCH /user/update, POST /auth/change-password, DELETE /user/terminate, GET /system/stats, POST /forensics/predict (multipart: file, user_id, recording_input_type).
+ * Endpoints: POST /auth/register, POST /auth/login, GET /user/me, PATCH /user/update, POST /auth/change-password, DELETE /user/terminate, GET /system/stats, POST /forensics/predict (multipart: file, user_id, recording_input_type), POST /forensics/compare/upload, GET /forensics/compare.
  */
 const API_BASE =
   typeof window !== 'undefined' &&
@@ -41,11 +41,19 @@ function storageRemove(key) {
 
 const ALLOWED_AUDIO_TYPES = ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3'];
 const ALLOWED_AUDIO_EXTS = ['.wav', '.mp3'];
+const COMPARE_ALLOWED_AUDIO_TYPES = ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/flac', 'audio/x-flac', 'audio/ogg', 'audio/vorbis'];
+const COMPARE_ALLOWED_AUDIO_EXTS = ['.wav', '.mp3', '.flac', '.ogg'];
 
 function isAllowedAudioFile(file) {
   if (!file) return false;
   const ext = (file.name || '').toLowerCase().replace(/^.*(\.\w+)$/, '$1');
   return ALLOWED_AUDIO_TYPES.includes(file.type) || ALLOWED_AUDIO_EXTS.includes(ext);
+}
+
+function isAllowedCompareAudioFile(file) {
+  if (!file) return false;
+  const ext = (file.name || '').toLowerCase().replace(/^.*(\.\w+)$/, '$1');
+  return COMPARE_ALLOWED_AUDIO_TYPES.includes(file.type) || COMPARE_ALLOWED_AUDIO_EXTS.includes(ext);
 }
 
 function getSavedSamples() {
@@ -279,6 +287,10 @@ function showPanel(name) {
   Object.values(panels).forEach((el) => el?.classList.remove('active'));
   const panel = panels[key];
   if (panel) panel.classList.add('active');
+
+  if (key === 'compare' && typeof getCompareMode === 'function' && getCompareMode() === 'saved' && compareState.historyItems.length === 0) {
+    refreshCompareSavedSamples({ silent: false });
+  }
 
   document.querySelectorAll('.sidebar-nav .nav-item[data-nav]').forEach((btn) => {
     const isActive = btn.getAttribute('data-nav') === name;
@@ -1993,26 +2005,51 @@ async function fetchSampleAnalysis(sampleId, userId, opts) {
   }
 }
 
-function populateSamplePicker(historyData) {
-  const select = document.getElementById('sample-picker-select');
+function getSampleItems(historyData) {
+  if (!Array.isArray(historyData)) return [];
+  return historyData.filter((item) => item && item.sample_id != null);
+}
+
+function fillSampleSelect(select, items, options = {}) {
   if (!select) return;
-  select.innerHTML = '<option value="" disabled selected>Select a sample…</option>';
-  let items = [];
-  if (Array.isArray(historyData)) {
-    items = historyData.filter((h) => h && h.sample_id != null);
-  }
+  const {
+    placeholder = 'Select a sample…',
+    emptyLabel = 'No samples found',
+  } = options;
+
+  select.innerHTML = '';
+
+  const placeholderOpt = document.createElement('option');
+  placeholderOpt.value = '';
+  placeholderOpt.textContent = placeholder;
+  placeholderOpt.selected = true;
+  select.appendChild(placeholderOpt);
+
   if (items.length === 0) {
-    select.innerHTML += '<option value="" disabled>No samples found</option>';
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = emptyLabel;
+    emptyOpt.disabled = true;
+    select.appendChild(emptyOpt);
     return;
   }
+
   items.forEach((item) => {
     const opt = document.createElement('option');
     opt.value = item.sample_id;
     const verdict = item.verdict ?? '';
+    const filename = item.filename ?? '';
     const date = item.created_at ?? item.date;
     const dateStr = date ? new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
-    opt.textContent = `#${item.sample_id}` + (verdict ? ` — ${verdict}` : '') + (dateStr ? ` (${dateStr})` : '');
+    opt.textContent = `#${item.sample_id}` + (verdict ? ` — ${verdict}` : '') + (filename ? ` — ${filename}` : '') + (dateStr ? ` (${dateStr})` : '');
     select.appendChild(opt);
+  });
+}
+
+function populateSamplePicker(historyData) {
+  fillSampleSelect(document.getElementById('sample-picker-select'), getSampleItems(historyData), {
+    placeholder: 'Select a sample…',
+    emptyLabel: 'No samples found',
   });
 }
 
@@ -2587,11 +2624,161 @@ function escapeHtml(s) {
 }
 
 // --- Comparative Analysis ---
-const compareState = { file1: null, file2: null, sampleId1: null, sampleId2: null };
+const compareState = {
+  mode: 'upload',
+  file1: null,
+  file2: null,
+  sampleId1: null,
+  sampleId2: null,
+  historyItems: [],
+};
+
+function getCompareMode() {
+  return compareState.mode;
+}
+
+function setCompareStatus(message, isError = false) {
+  const statusEl = document.getElementById('compare-saved-status');
+  if (!statusEl) return;
+  if (!message) {
+    statusEl.style.display = 'none';
+    statusEl.textContent = '';
+    statusEl.classList.remove('feedback-status-error');
+    return;
+  }
+  statusEl.style.display = '';
+  statusEl.textContent = message;
+  statusEl.classList.toggle('feedback-status-error', !!isError);
+}
+
+function populateCompareSavedPickers(items) {
+  const sampleItems = getSampleItems(items);
+  fillSampleSelect(document.getElementById('compare-saved-sample-1'), sampleItems, {
+    placeholder: 'Select saved sample 1…',
+    emptyLabel: 'No saved samples found',
+  });
+  fillSampleSelect(document.getElementById('compare-saved-sample-2'), sampleItems, {
+    placeholder: 'Select saved sample 2…',
+    emptyLabel: 'No saved samples found',
+  });
+}
+
+async function fetchHistoryItems(userId) {
+  const res = await apiFetch(`forensics/history?user_id=${encodeURIComponent(userId)}`);
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(parseApiError(res, text));
+  }
+
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+  const items = Array.isArray(data) ? data.slice() : (data != null && data !== '' ? [data] : []);
+  items.sort((a, b) => {
+    const da = new Date(a?.created_at ?? a?.date ?? 0).getTime();
+    const db = new Date(b?.created_at ?? b?.date ?? 0).getTime();
+    return db - da;
+  });
+  return items;
+}
+
+async function refreshCompareSavedSamples(options = {}) {
+  const { silent = false } = options;
+  const userId = state.userId ?? getStoredUserId();
+  if (userId == null) {
+    compareState.historyItems = [];
+    populateCompareSavedPickers([]);
+    setCompareStatus('Saved-sample compare needs a signed-in user.', true);
+    updateCompareButton();
+    return;
+  }
+
+  if (!silent) setCompareStatus('Loading saved samples...');
+  try {
+    const items = await fetchHistoryItems(userId);
+    compareState.historyItems = items;
+    populateCompareSavedPickers(items);
+    const count = getSampleItems(items).length;
+    setCompareStatus(count > 0 ? `Loaded ${count} saved sample${count === 1 ? '' : 's'}.` : 'No saved samples found yet.');
+  } catch (err) {
+    compareState.historyItems = [];
+    populateCompareSavedPickers([]);
+    setCompareStatus(err.message || formatNetworkError(err), true);
+  }
+  updateCompareButton();
+}
+
+function setCompareMode(mode) {
+  compareState.mode = mode === 'saved' ? 'saved' : 'upload';
+  const uploadFields = document.getElementById('compare-upload-fields');
+  const savedFields = document.getElementById('compare-saved-fields');
+  const submitBtn = document.getElementById('compare-submit-btn');
+  const errorEl = document.getElementById('compare-error');
+  const resultEl = document.getElementById('compare-result');
+
+  if (uploadFields) uploadFields.style.display = compareState.mode === 'upload' ? '' : 'none';
+  if (savedFields) savedFields.style.display = compareState.mode === 'saved' ? '' : 'none';
+  if (submitBtn) submitBtn.textContent = compareState.mode === 'upload' ? 'Compare Fresh Samples' : 'Compare Saved Samples';
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+  if (resultEl) resultEl.style.display = 'none';
+
+  if (compareState.mode === 'saved' && compareState.historyItems.length === 0) {
+    refreshCompareSavedSamples({ silent: false });
+  }
+
+  updateCompareButton();
+}
+
+function normalizeComparisonItem(item, fallbackFilename = '') {
+  if (!item || typeof item !== 'object') return item;
+  return {
+    ...item,
+    filename: item.filename ?? fallbackFilename,
+    confidence: item.confidence ?? item.confidence_score ?? item.confidenceScore ?? null,
+  };
+}
+
+function renderCompareResults(data) {
+  const resultEl = document.getElementById('compare-result');
+  const agreementEl = document.getElementById('compare-agreement');
+  const r1El = document.getElementById('compare-result-1');
+  const r2El = document.getElementById('compare-result-2');
+
+  if (agreementEl) {
+    const agree = data?.verdict_agreement;
+    if (agree === true) {
+      agreementEl.textContent = 'Verdicts Agree';
+      agreementEl.className = 'compare-agreement compare-agreement--agree';
+    } else if (agree === false) {
+      agreementEl.textContent = 'Verdicts Disagree';
+      agreementEl.className = 'compare-agreement compare-agreement--disagree';
+    } else {
+      agreementEl.textContent = '';
+      agreementEl.className = 'compare-agreement';
+    }
+  }
+
+  const comparison = Array.isArray(data?.comparison)
+    ? data.comparison.map((item, index) => normalizeComparisonItem(item, compareState[`file${index + 1}`]?.name || ''))
+    : Array.isArray(data?.results)
+      ? data.results.map((item, index) => normalizeComparisonItem(item, compareState[`file${index + 1}`]?.name || ''))
+      : (data?.comparison ? [normalizeComparisonItem(data.comparison)] : [normalizeComparisonItem(data)]);
+
+  renderAnalysisContent(r1El, comparison[0] || null);
+  renderAnalysisContent(r2El, comparison[1] || null);
+  if (resultEl) resultEl.style.display = '';
+}
 
 function updateCompareButton() {
   const btn = document.getElementById('compare-submit-btn');
-  if (btn) btn.disabled = !(compareState.file1 && compareState.file2);
+  if (!btn) return;
+  if (getCompareMode() === 'saved') {
+    const sampleId1 = document.getElementById('compare-saved-sample-1')?.value;
+    const sampleId2 = document.getElementById('compare-saved-sample-2')?.value;
+    btn.disabled = !(sampleId1 && sampleId2 && sampleId1 !== sampleId2);
+    return;
+  }
+  btn.disabled = !(compareState.file1 && compareState.file2);
 }
 
 function setupCompareUpload(index) {
@@ -2607,8 +2794,8 @@ function setupCompareUpload(index) {
   fileInput?.addEventListener('change', () => {
     const file = fileInput.files?.[0];
     if (!file) return;
-    if (!isAllowedAudioFile(file)) {
-      alert('Only WAV and MP3 files are accepted. Please select a supported file.');
+    if (!isAllowedCompareAudioFile(file)) {
+      alert('Only WAV, MP3, FLAC, and OGG files are accepted for comparison. Please select a supported file.');
       fileInput.value = '';
       return;
     }
@@ -2621,56 +2808,75 @@ function setupCompareUpload(index) {
 setupCompareUpload(1);
 setupCompareUpload(2);
 
+document.querySelectorAll('input[name="compare-mode"]').forEach((input) => {
+  input.addEventListener('change', () => {
+    setCompareMode(input.value);
+  });
+});
+
+document.getElementById('compare-history-refresh-btn')?.addEventListener('click', () => {
+  refreshCompareSavedSamples({ silent: false });
+});
+
+document.getElementById('compare-saved-sample-1')?.addEventListener('change', updateCompareButton);
+document.getElementById('compare-saved-sample-2')?.addEventListener('change', updateCompareButton);
+
 document.getElementById('compare-submit-btn')?.addEventListener('click', async () => {
   const errorEl = document.getElementById('compare-error');
   const loadingEl = document.getElementById('compare-loading');
   const resultEl = document.getElementById('compare-result');
   const btn = document.getElementById('compare-submit-btn');
+  const mode = getCompareMode();
 
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
   if (resultEl) resultEl.style.display = 'none';
 
   const userId = state.userId ?? getStoredUserId();
-  if (userId == null) {
-    if (errorEl) { errorEl.textContent = 'Could not determine your account. Please log out and log in again.'; errorEl.style.display = ''; }
+  if (mode === 'saved' && userId == null) {
+    if (errorEl) { errorEl.textContent = 'Saved-sample compare needs a signed-in user. Please log out and log in again.'; errorEl.style.display = ''; }
     return;
   }
-  if (!compareState.file1 || !compareState.file2) {
+  if (mode === 'upload' && (!compareState.file1 || !compareState.file2)) {
     if (errorEl) { errorEl.textContent = 'Please upload both audio samples.'; errorEl.style.display = ''; }
     return;
   }
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
-  if (loadingEl) loadingEl.style.display = '';
+  const selectedSample1 = document.getElementById('compare-saved-sample-1')?.value || null;
+  const selectedSample2 = document.getElementById('compare-saved-sample-2')?.value || null;
+  if (mode === 'saved' && (!selectedSample1 || !selectedSample2)) {
+    if (errorEl) { errorEl.textContent = 'Please choose two saved samples.'; errorEl.style.display = ''; }
+    return;
+  }
+  if (mode === 'saved' && selectedSample1 === selectedSample2) {
+    if (errorEl) { errorEl.textContent = 'Choose two different saved samples to compare.'; errorEl.style.display = ''; }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = mode === 'upload' ? 'Uploading…' : 'Comparing…'; }
+  if (loadingEl) {
+    loadingEl.style.display = '';
+    loadingEl.textContent = mode === 'upload' ? 'Uploading and analyzing both samples…' : 'Loading saved comparison…';
+  }
 
   try {
-    const uploadSample = async (file) => {
+    let res;
+    if (mode === 'upload') {
       const fd = new FormData();
-      fd.append('file', file, file.name);
-      fd.append('user_id', String(userId));
+      fd.append('file_1', compareState.file1, compareState.file1.name);
+      fd.append('file_2', compareState.file2, compareState.file2.name);
+      if (userId != null) fd.append('user_id', String(userId));
       fd.append(RECORDING_INPUT_TYPE_KEY, 'upload');
-      const res = await apiFetch('forensics/predict', { method: 'POST', body: fd });
-      const text = await res.text();
-      if (!res.ok) throw new Error(parseApiError(res, text));
-      let data = null;
-      try { data = JSON.parse(text); } catch { data = text; }
-      return data?.sample_id ?? null;
-    };
-
-    if (loadingEl) loadingEl.textContent = 'Uploading Sample 1…';
-    const sid1 = await uploadSample(compareState.file1);
-    if (sid1 == null) throw new Error('Sample 1 did not return a sample ID.');
-
-    if (loadingEl) loadingEl.textContent = 'Uploading Sample 2…';
-    const sid2 = await uploadSample(compareState.file2);
-    if (sid2 == null) throw new Error('Sample 2 did not return a sample ID.');
-
-    compareState.sampleId1 = sid1;
-    compareState.sampleId2 = sid2;
-
-    if (loadingEl) loadingEl.textContent = 'Comparing…';
-    const qp = new URLSearchParams({ sample_id_1: String(sid1), sample_id_2: String(sid2), user_id: String(userId) });
-    const res = await apiFetch(`forensics/compare?${qp.toString()}`);
+      res = await apiFetch('forensics/compare/upload', { method: 'POST', body: fd });
+    } else {
+      compareState.sampleId1 = selectedSample1;
+      compareState.sampleId2 = selectedSample2;
+      const qp = new URLSearchParams({
+        sample_id_1: String(selectedSample1),
+        sample_id_2: String(selectedSample2),
+        user_id: String(userId),
+      });
+      res = await apiFetch(`forensics/compare?${qp.toString()}`);
+    }
     const text = await res.text();
 
     if (loadingEl) loadingEl.style.display = 'none';
@@ -2687,41 +2893,31 @@ document.getElementById('compare-submit-btn')?.addEventListener('click', async (
     let data = null;
     try { data = JSON.parse(text); } catch { data = text; }
 
-    const agreementEl = document.getElementById('compare-agreement');
-    if (agreementEl && data) {
-      const agree = data.verdict_agreement;
-      if (agree === true) {
-        agreementEl.textContent = 'Verdicts Agree';
-        agreementEl.className = 'compare-agreement compare-agreement--agree';
-      } else if (agree === false) {
-        agreementEl.textContent = 'Verdicts Disagree';
-        agreementEl.className = 'compare-agreement compare-agreement--disagree';
-      } else {
-        agreementEl.textContent = '';
-        agreementEl.className = 'compare-agreement';
+    if (mode === 'upload') {
+      const results = Array.isArray(data?.results) ? data.results : [];
+      compareState.sampleId1 = results[0]?.sample_id ?? data?.comparison?.[0]?.sample_id ?? null;
+      compareState.sampleId2 = results[1]?.sample_id ?? data?.comparison?.[1]?.sample_id ?? null;
+      if (results.length > 0) {
+        compareState.historyItems = [
+          ...results.map((item, index) => ({
+            sample_id: item.sample_id,
+            verdict: item.verdict,
+            filename: data?.comparison?.[index]?.filename ?? compareState[`file${index + 1}`]?.name ?? '',
+            confidence: item.confidence_score ?? item.confidence ?? null,
+            created_at: new Date().toISOString(),
+          })),
+          ...compareState.historyItems.filter((item) => !results.some((result) => String(result.sample_id) === String(item.sample_id))),
+        ];
+        populateCompareSavedPickers(compareState.historyItems);
       }
     }
 
-    const comparison = data?.comparison;
-    const r1El = document.getElementById('compare-result-1');
-    const r2El = document.getElementById('compare-result-2');
-    if (Array.isArray(comparison) && comparison.length >= 2) {
-      renderAnalysisContent(r1El, comparison[0]);
-      renderAnalysisContent(r2El, comparison[1]);
-    } else if (comparison) {
-      renderAnalysisContent(r1El, comparison);
-      if (r2El) r2El.innerHTML = '';
-    } else {
-      renderAnalysisContent(r1El, data);
-      if (r2El) r2El.innerHTML = '';
-    }
-
-    if (resultEl) resultEl.style.display = '';
+    renderCompareResults(data);
   } catch (err) {
     if (loadingEl) loadingEl.style.display = 'none';
     if (errorEl) { errorEl.textContent = err.message || formatNetworkError(err); errorEl.style.display = ''; }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Compare Samples'; }
+    if (btn) { btn.disabled = false; btn.textContent = mode === 'upload' ? 'Compare Fresh Samples' : 'Compare Saved Samples'; }
     updateCompareButton();
   }
 });
@@ -2782,31 +2978,11 @@ async function loadHistoryFromServer() {
   }
 
   try {
-    const res = await apiFetch(`forensics/history?user_id=${encodeURIComponent(userId)}`);
-    const text = await res.text();
+    const serverItems = await fetchHistoryItems(userId);
     if (loadingEl) loadingEl.style.display = 'none';
-    if (!res.ok) {
-      if (errorEl) {
-        errorEl.textContent = parseApiError(res, text);
-        errorEl.style.display = 'block';
-      }
-      if (placeholderCard) placeholderCard.style.display = 'block';
-      return;
-    }
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
     const clearBtn = document.getElementById('clear-history-btn');
     let hasEntries = false;
     let serverCount = 0;
-    let serverItems = [];
-    if (Array.isArray(data)) serverItems = data;
-    else if (data != null && data !== '') serverItems = [data];
-
-    serverItems.sort((a, b) => {
-      const da = new Date(a.created_at ?? a.date ?? 0).getTime();
-      const db = new Date(b.created_at ?? b.date ?? 0).getTime();
-      return db - da;
-    });
 
     if (listEl) {
       listEl.innerHTML = '';
@@ -2823,6 +2999,8 @@ async function loadHistoryFromServer() {
     updateHistorySummary(serverCount);
     if (clearBtn) clearBtn.style.display = hasEntries ? '' : 'none';
     if (placeholderCard) placeholderCard.style.display = 'none';
+    compareState.historyItems = serverItems;
+    populateCompareSavedPickers(serverItems);
     populateSamplePicker(serverItems);
   } catch (err) {
     if (loadingEl) loadingEl.style.display = 'none';

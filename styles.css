@@ -1563,6 +1563,33 @@ select:hover {
 }
 
 /* Comparative Analysis page */
+.compare-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+@media (max-width: 600px) {
+  .compare-mode-switch { grid-template-columns: 1fr; }
+}
+.compare-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  color: var(--dark-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.compare-mode-option input {
+  margin: 0;
+  accent-color: var(--primary-blue);
+}
 .compare-uploads {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1608,6 +1635,68 @@ select:hover {
 .compare-file-name.has-file {
   color: var(--primary-blue);
   font-weight: 600;
+}
+.compare-saved-fields {
+  margin-bottom: 20px;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+}
+.compare-saved-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 600px) {
+  .compare-saved-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+.compare-saved-copy {
+  margin: 0;
+  font-size: 14px;
+  color: var(--grey-700);
+}
+.compare-saved-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 600px) {
+  .compare-saved-grid { grid-template-columns: 1fr; }
+}
+.compare-select-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-bg, #fff);
+}
+.compare-select-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dark-text);
+}
+.compare-select-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--dark-text);
+}
+.compare-saved-status {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--grey-700);
 }
 .compare-actions {
   margin-bottom: 20px;
