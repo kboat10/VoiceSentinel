@@ -822,6 +822,38 @@ select:hover {
   margin-bottom: 24px;
 }
 
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.auth-mode-btn {
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.68);
+  color: var(--grey-600);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.auth-mode-btn:hover {
+  border-color: rgba(34, 211, 238, 0.55);
+  color: var(--dark-text);
+}
+
+.auth-mode-btn.active {
+  background: linear-gradient(140deg, rgba(14, 165, 233, 0.32), rgba(8, 145, 178, 0.22));
+  color: #ecfeff;
+  border-color: rgba(56, 189, 248, 0.7);
+  box-shadow: 0 8px 18px rgba(14, 165, 233, 0.2);
+}
+
 .auth-error {
   padding: 12px 14px;
   margin-bottom: 16px;

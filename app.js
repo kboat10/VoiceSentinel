@@ -206,6 +206,24 @@ function getPredictionConfidence(obj) {
   return Number.isFinite(num) ? num : null;
 }
 
+function getActiveExplanationLevel() {
+  if (!getAuthToken()) return 'BASIC';
+  return normalizeUserType(state.userType || getStoredUserType() || 'BASIC');
+}
+
+function renderConfidenceOnly(container, data) {
+  const confidence = getPredictionConfidence(data);
+  const sentinelScore = formatSentinelScore(confidence);
+  const rawConfidence = confidence != null ? confidence.toFixed(4) : '—';
+  container.innerHTML =
+    '<div class="analysis-section analysis-meta-section">' +
+      '<div class="analysis-meta-rows">' +
+        `<div class="analysis-meta-row"><span class="analysis-meta-label">Sentinel Score</span><span class="analysis-meta-value">${escapeHtml(sentinelScore)}</span></div>` +
+        `<div class="analysis-meta-row"><span class="analysis-meta-label">Confidence</span><span class="analysis-meta-value">${escapeHtml(rawConfidence)}</span></div>` +
+      '</div>' +
+    '</div>';
+}
+
 function updateUserSurface() {
   const name = getStoredUserName();
   const email = getStoredEmail();
@@ -405,20 +423,32 @@ const authSub = document.getElementById('auth-sub');
 const authSignupFields = document.getElementById('auth-signup-fields');
 const authSubmitBtn = document.getElementById('btn-auth-submit');
 const toggleAuthBtn = document.getElementById('btn-toggle-auth');
+const authModeSignInBtn = document.getElementById('btn-auth-mode-signin');
+const authModeSignUpBtn = document.getElementById('btn-auth-mode-signup');
 
 document.getElementById('btn-signin')?.addEventListener('click', () => {
   welcomeContent.style.display = 'none';
   authContent.style.display = 'block';
-  setAuthMode(false);
+  setAuthMode(true);
   hideAuthError();
 });
 document.getElementById('btn-skip')?.addEventListener('click', enterApp);
 document.getElementById('btn-skip-auth')?.addEventListener('click', enterApp);
 document.getElementById('btn-auth-submit')?.addEventListener('click', handleAuthSubmit);
 
+authModeSignInBtn?.addEventListener('click', () => {
+  setAuthMode(true);
+  hideAuthError();
+});
+
+authModeSignUpBtn?.addEventListener('click', () => {
+  setAuthMode(false);
+  hideAuthError();
+});
+
 toggleAuthBtn?.addEventListener('click', () => {
-  const isSignUp = authSignupFields.style.display !== 'none';
-  setAuthMode(isSignUp);
+  const showSignIn = authSignupFields.style.display !== 'none';
+  setAuthMode(showSignIn);
   hideAuthError();
 });
 
@@ -641,12 +671,14 @@ async function handleLogin() {
   }
 }
 
-function setAuthMode(isSignUp) {
-  authSignupFields.style.display = isSignUp ? 'none' : 'block';
-  authTitle.textContent = isSignUp ? 'Welcome Back' : 'Create Account';
-  authSub.textContent = isSignUp ? 'Sign in to access your account' : 'Sign up to save your voice analysis history';
-  authSubmitBtn.textContent = isSignUp ? 'Sign In' : 'Sign Up';
-  toggleAuthBtn.textContent = isSignUp ? 'Need an account? Sign up' : 'Already have an account? Sign in';
+function setAuthMode(showSignIn) {
+  authSignupFields.style.display = showSignIn ? 'none' : 'block';
+  authTitle.textContent = showSignIn ? 'Welcome Back' : 'Create Account';
+  authSub.textContent = showSignIn ? 'Sign in to access your account' : 'Sign up to save your voice analysis history';
+  authSubmitBtn.textContent = showSignIn ? 'Sign In' : 'Sign Up';
+  toggleAuthBtn.textContent = showSignIn ? 'Switch to Sign Up' : 'Switch to Sign In';
+  authModeSignInBtn?.classList.toggle('active', showSignIn);
+  authModeSignUpBtn?.classList.toggle('active', !showSignIn);
 }
 
 // --- Theme (dark mode) ---
@@ -1849,7 +1881,18 @@ function simpleMarkdownToHtml(md) {
 
 function renderAnalysisContent(container, data) {
   if (!container) return;
+  const explanationLevel = getActiveExplanationLevel();
+
+  if (explanationLevel === 'BASIC' && data && typeof data === 'object') {
+    renderConfidenceOnly(container, data);
+    return;
+  }
+
   if (typeof data === 'string') {
+    if (explanationLevel !== 'FORENSIC') {
+      container.innerHTML = '<p style="color:var(--grey-600);">Detailed forensic text is available for forensic-level users.</p>';
+      return;
+    }
     const rendered = simpleMarkdownToHtml(data);
     container.innerHTML = `<div class="analysis-prose">${rendered || escapeHtml(data)}</div>`;
     return;
@@ -1970,12 +2013,22 @@ function renderAnalysisContent(container, data) {
 
   let html = '';
   let sectionIdx = 0;
+  const confidence = getPredictionConfidence(data);
+  const isTechnical = explanationLevel === 'TECHNICAL';
+  const isForensic = explanationLevel === 'FORENSIC';
 
-  if (Object.keys(meta).length) {
+  if (isTechnical) {
+    html += '<div class="analysis-section analysis-meta-section"><div class="analysis-meta-rows">' +
+      `<div class="analysis-meta-row"><span class="analysis-meta-label">Sentinel Score</span><span class="analysis-meta-value">${escapeHtml(formatSentinelScore(confidence))}</span></div>` +
+      `<div class="analysis-meta-row"><span class="analysis-meta-label">Confidence</span><span class="analysis-meta-value">${escapeHtml(confidence != null ? confidence.toFixed(4) : '—')}</span></div>` +
+      '</div></div>';
+  }
+
+  if (isForensic && Object.keys(meta).length) {
     html += `<div class="analysis-section analysis-meta-section"><div class="analysis-meta-rows">${buildMetaRows(meta)}</div></div>`;
   }
 
-  if (Object.keys(modelVotes).length) {
+  if (isForensic && Object.keys(modelVotes).length) {
     const sid = `as-${sectionIdx++}`;
     html += `<div class="analysis-section"><div class="analysis-section-header" data-toggle="${sid}"><span class="analysis-section-title">Model Votes</span><span class="analysis-section-badge">${Object.keys(modelVotes).length} models</span><span class="analysis-chevron">&#9662;</span></div><div class="analysis-section-body" id="section-${sid}">${buildModelVotesBar(modelVotes)}</div></div>`;
   }
@@ -1998,13 +2051,13 @@ function renderAnalysisContent(container, data) {
     html += `<div class="analysis-section"><div class="analysis-section-header" data-toggle="${sid}"><span class="analysis-section-title">${escapeHtml(label)}</span><span class="analysis-section-badge">${count} features</span><span class="analysis-chevron">${chevron}</span></div><div class="analysis-section-body${collapsedClass}" id="section-${sid}"><div class="feat-grid">${buildFeatureGrid(obj)}</div></div></div>`;
   }
 
-  if (proseAnalysis) {
+  if (isForensic && proseAnalysis) {
     const sid = `as-${sectionIdx++}`;
     const rendered = simpleMarkdownToHtml(proseAnalysis);
     html += `<div class="analysis-section"><div class="analysis-section-header" data-toggle="${sid}"><span class="analysis-section-title">Forensic Analysis Report</span><span class="analysis-chevron">&#9662;</span></div><div class="analysis-section-body" id="section-${sid}"><div class="analysis-prose">${rendered}</div></div></div>`;
   }
 
-  if (Object.keys(scalarFeatures).length) {
+  if (isForensic && Object.keys(scalarFeatures).length) {
     const sid = `as-${sectionIdx++}`;
     const rows = Object.entries(scalarFeatures).map(([k, v]) => {
       const label = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -2014,6 +2067,18 @@ function renderAnalysisContent(container, data) {
       return `<div class="analysis-meta-row"><span class="analysis-meta-label">${escapeHtml(label)}</span><span class="analysis-meta-value">${escapeHtml(String(val ?? '—'))}</span></div>`;
     }).join('');
     html += `<div class="analysis-section"><div class="analysis-section-header" data-toggle="${sid}"><span class="analysis-section-title">Additional Details</span><span class="analysis-section-badge">${Object.keys(scalarFeatures).length}</span><span class="analysis-chevron">&#9662;</span></div><div class="analysis-section-body" id="section-${sid}"><div class="analysis-meta-rows">${rows}</div></div></div>`;
+  }
+
+  if (isTechnical) {
+    const numericScalars = Object.entries(scalarFeatures).filter(([, v]) => typeof v === 'number');
+    if (numericScalars.length) {
+      const sid = `as-${sectionIdx++}`;
+      const rows = numericScalars.map(([k, v]) => {
+        const label = k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        return `<div class="analysis-meta-row"><span class="analysis-meta-label">${escapeHtml(label)}</span><span class="analysis-meta-value">${escapeHtml(fmtVal(v))}</span></div>`;
+      }).join('');
+      html += `<div class="analysis-section"><div class="analysis-section-header" data-toggle="${sid}"><span class="analysis-section-title">Technical Scalars</span><span class="analysis-section-badge">${numericScalars.length}</span><span class="analysis-chevron">&#9662;</span></div><div class="analysis-section-body" id="section-${sid}"><div class="analysis-meta-rows">${rows}</div></div></div>`;
+    }
   }
 
   if (!html) {
