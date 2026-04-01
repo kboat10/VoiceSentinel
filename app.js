@@ -513,7 +513,7 @@ async function handleRegister() {
       const passwordConfirmEl = document.getElementById('auth-password-confirm');
       if (passwordConfirmEl) passwordConfirmEl.value = '';
       updateUserSurface();
-      alert('Registration successful. Please sign in with your new account.');
+      await showInfoDialog('Registration complete', 'Please sign in with your new account.');
       return;
     }
 
@@ -817,6 +817,87 @@ function parseApiError(res, text) {
   return `Request failed (${res.status}). Try again.`;
 }
 
+async function showInfoDialog(title, text) {
+  if (typeof window !== 'undefined' && window.Swal) {
+    await window.Swal.fire({
+      title,
+      text,
+      icon: 'success',
+      confirmButtonText: 'OK',
+      customClass: {
+        popup: 'vs-swal-popup',
+        confirmButton: 'vs-swal-confirm',
+      },
+      buttonsStyling: false,
+    });
+    return;
+  }
+}
+
+async function askConfirmation(title, text, confirmText = 'Confirm') {
+  if (typeof window !== 'undefined' && window.Swal) {
+    const result = await window.Swal.fire({
+      title,
+      text,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: confirmText,
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      customClass: {
+        popup: 'vs-swal-popup',
+        confirmButton: 'vs-swal-confirm',
+        cancelButton: 'vs-swal-cancel',
+      },
+      buttonsStyling: false,
+    });
+    return !!result.isConfirmed;
+  }
+  return false;
+}
+
+async function showUploadFormatWarning(message) {
+  if (typeof window !== 'undefined' && window.Swal) {
+    await window.Swal.fire({
+      title: 'Unsupported file',
+      text: message,
+      icon: 'error',
+      confirmButtonText: 'Choose another file',
+      customClass: {
+        popup: 'vs-swal-popup',
+        confirmButton: 'vs-swal-confirm',
+      },
+      buttonsStyling: false,
+    });
+  }
+}
+
+async function chooseRecordingInputTypeDialog() {
+  if (typeof window !== 'undefined' && window.Swal) {
+    const result = await window.Swal.fire({
+      title: 'Select Recording Source',
+      html: '<p style="margin:0;color:#94a3b8;">Choose what you are recording so analysis metadata stays accurate.</p>',
+      icon: 'question',
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: 'External Source',
+      denyButtonText: 'My Live Voice',
+      cancelButtonText: 'Cancel',
+      customClass: {
+        popup: 'vs-swal-popup',
+        confirmButton: 'vs-swal-confirm',
+        denyButton: 'vs-swal-secondary',
+        cancelButton: 'vs-swal-cancel',
+      },
+      buttonsStyling: false,
+    });
+    if (result.isConfirmed) return 'live_source';
+    if (result.isDenied) return 'live_user';
+    return null;
+  }
+  return null;
+}
+
 /**
  * Edit profile save: user can change name only, password only, user type only, or any combination.
  * Name is stored locally only (never sent to API). Password and user type use their respective APIs.
@@ -991,7 +1072,8 @@ document.getElementById('settings-about-me')?.addEventListener('click', async ()
 
 // --- Settings: Delete account ---
 document.getElementById('settings-delete-account')?.addEventListener('click', async () => {
-  if (!confirm('Permanently delete your account? This cannot be undone.')) return;
+  const confirmed = await askConfirmation('Delete account?', 'Permanently delete your account? This cannot be undone.', 'Delete account');
+  if (!confirmed) return;
   const btn = document.getElementById('settings-delete-account');
   const errorEl = document.getElementById('settings-delete-error');
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
@@ -2492,12 +2574,13 @@ async function submitRecordingFromReview() {
   }
 }
 
-document.getElementById('btn-record')?.addEventListener('click', () => {
+document.getElementById('btn-record')?.addEventListener('click', async () => {
   if (state.isRecording) {
     if (state.isPaused) resumeRecording();
   } else {
-    const fromExternalSource = confirm('Are you recording from an external source (speaker/device)? Click OK for source audio or Cancel for your own live voice.');
-    state.currentLiveInputType = fromExternalSource ? 'live_source' : 'live_user';
+    const inputType = await chooseRecordingInputTypeDialog();
+    if (!inputType) return;
+    state.currentLiveInputType = inputType;
     startMockRecording();
   }
 });
@@ -2545,11 +2628,11 @@ document.getElementById('upload-card')?.addEventListener('keydown', (e) => {
     uploadAudioInput?.click();
   }
 });
-uploadAudioInput?.addEventListener('change', () => {
+uploadAudioInput?.addEventListener('change', async () => {
   const file = uploadAudioInput.files?.[0];
   if (!file) return;
   if (!isAllowedAudioFile(file)) {
-    alert('Only WAV and MP3 files are accepted. Please select a supported file.');
+    await showUploadFormatWarning('Only WAV and MP3 files are accepted. Please select a supported file.');
     uploadAudioInput.value = '';
     return;
   }
@@ -2791,11 +2874,11 @@ function setupCompareUpload(index) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput?.click(); }
   });
 
-  fileInput?.addEventListener('change', () => {
+  fileInput?.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
     if (!file) return;
     if (!isAllowedCompareAudioFile(file)) {
-      alert('Only WAV, MP3, FLAC, and OGG files are accepted for comparison. Please select a supported file.');
+      await showUploadFormatWarning('Only WAV, MP3, FLAC, and OGG files are accepted for comparison. Please select a supported file.');
       fileInput.value = '';
       return;
     }
@@ -3018,7 +3101,8 @@ document.getElementById('history-refresh-btn')?.addEventListener('click', () => 
 
 // --- Clear All History ---
 document.getElementById('clear-history-btn')?.addEventListener('click', async () => {
-  if (!confirm('Permanently delete all your analysis history? This cannot be undone.')) return;
+  const confirmed = await askConfirmation('Clear all history?', 'Permanently delete all your analysis history? This cannot be undone.', 'Clear history');
+  if (!confirmed) return;
   const btn = document.getElementById('clear-history-btn');
   const errorEl = document.getElementById('clear-history-error');
   if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
